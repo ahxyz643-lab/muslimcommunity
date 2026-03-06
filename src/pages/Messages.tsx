@@ -1,5 +1,4 @@
-import { messages } from "@/data/mockData";
-import { Search, Edit, Phone, Video } from "lucide-react";
+import { Search, Edit } from "lucide-react";
 
 const Messages = () => {
   return (
@@ -23,46 +22,15 @@ const Messages = () => {
         </div>
       </div>
 
-      {/* Message List */}
-      <div>
-        {messages.map((msg) => (
-          <button
-            key={msg.id}
-            className="flex w-full items-center gap-3 px-4 py-3 transition-colors hover:bg-secondary/50"
-          >
-            <div className="relative">
-              <img
-                src={msg.user.avatar}
-                alt={msg.user.displayName}
-                className="h-12 w-12 rounded-full object-cover"
-              />
-              {msg.unread > 0 && (
-                <span className="absolute -right-0.5 -top-0.5 flex h-5 w-5 items-center justify-center rounded-full bg-primary text-[10px] font-bold text-primary-foreground">
-                  {msg.unread}
-                </span>
-              )}
-            </div>
-            <div className="flex-1 text-left">
-              <div className="flex items-center justify-between">
-                <span className={`text-sm ${msg.unread > 0 ? "font-bold text-foreground" : "font-medium text-foreground"}`}>
-                  {msg.user.displayName}
-                </span>
-                <span className="text-xs text-muted-foreground">{msg.timestamp}</span>
-              </div>
-              <p className={`mt-0.5 truncate text-xs ${msg.unread > 0 ? "font-medium text-foreground" : "text-muted-foreground"}`}>
-                {msg.lastMessage}
-              </p>
-            </div>
-            <div className="flex items-center gap-1">
-              <button className="rounded-full p-1.5 text-muted-foreground hover:text-primary">
-                <Phone className="h-4 w-4" />
-              </button>
-              <button className="rounded-full p-1.5 text-muted-foreground hover:text-primary">
-                <Video className="h-4 w-4" />
-              </button>
-            </div>
-          </button>
-        ))}
+      {/* Empty State */}
+      <div className="flex flex-col items-center justify-center py-20 px-4 text-center">
+        <div className="flex h-16 w-16 items-center justify-center rounded-full bg-secondary mb-4">
+          <Edit className="h-8 w-8 text-muted-foreground" />
+        </div>
+        <h2 className="text-lg font-semibold text-foreground">No messages yet</h2>
+        <p className="mt-1 text-sm text-muted-foreground">
+          Start a conversation with someone from the community
+        </p>
       </div>
     </div>
   );
