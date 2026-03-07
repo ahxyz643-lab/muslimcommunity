@@ -10,6 +10,10 @@ import Explore from "@/pages/Explore";
 import CreatePost from "@/pages/CreatePost";
 import Messages from "@/pages/Messages";
 import Profile from "@/pages/Profile";
+import EditProfile from "@/pages/EditProfile";
+import Settings from "@/pages/Settings";
+import Activity from "@/pages/Activity";
+import CreatorStudio from "@/pages/CreatorStudio";
 import Auth from "@/pages/Auth";
 import NotFound from "@/pages/NotFound";
 
@@ -34,6 +38,10 @@ const AppRoutes = () => {
         <Route path="/create" element={<ProtectedRoute><CreatePost /></ProtectedRoute>} />
         <Route path="/messages" element={<ProtectedRoute><Messages /></ProtectedRoute>} />
         <Route path="/profile" element={<ProtectedRoute><Profile /></ProtectedRoute>} />
+        <Route path="/edit-profile" element={<ProtectedRoute><EditProfile /></ProtectedRoute>} />
+        <Route path="/settings" element={<ProtectedRoute><Settings /></ProtectedRoute>} />
+        <Route path="/activity" element={<ProtectedRoute><Activity /></ProtectedRoute>} />
+        <Route path="/creator-studio" element={<ProtectedRoute><CreatorStudio /></ProtectedRoute>} />
         <Route path="*" element={<NotFound />} />
       </Routes>
       {user && <BottomNav />}
