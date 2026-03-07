@@ -1,5 +1,6 @@
-import { Settings, Grid3X3, Bookmark, Heart, BarChart3, LogOut, Loader2 } from "lucide-react";
+import { Settings, Grid3X3, Bookmark, Heart, BarChart3, Loader2 } from "lucide-react";
 import { useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
@@ -8,7 +9,8 @@ import PostCard, { PostWithProfile } from "@/components/PostCard";
 import heroPattern from "@/assets/hero-pattern.jpg";
 
 const Profile = () => {
-  const { user, signOut } = useAuth();
+  const { user } = useAuth();
+  const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState("posts");
 
   const { data: profile, isLoading: profileLoading } = useQuery({
@@ -70,11 +72,8 @@ const Profile = () => {
       <div className="relative h-36">
         <img src={heroPattern} alt="Cover" className="h-full w-full object-cover" />
         <div className="absolute inset-0 bg-gradient-to-b from-transparent to-background" />
-        <div className="absolute right-3 top-3 flex gap-2">
-          <button onClick={signOut} className="rounded-full bg-card/80 p-2 backdrop-blur-sm text-muted-foreground hover:text-destructive" title="Sign Out">
-            <LogOut className="h-5 w-5" />
-          </button>
-          <button className="rounded-full bg-card/80 p-2 backdrop-blur-sm text-muted-foreground hover:text-foreground">
+        <div className="absolute right-3 top-3">
+          <button onClick={() => navigate("/settings")} className="rounded-full bg-card/80 p-2 backdrop-blur-sm text-muted-foreground hover:text-foreground">
             <Settings className="h-5 w-5" />
           </button>
         </div>
@@ -107,14 +106,14 @@ const Profile = () => {
         </div>
 
         <div className="mt-4 flex gap-3">
-          <button className="flex-1 rounded-xl bg-primary py-2.5 text-sm font-semibold text-primary-foreground transition-all hover:shadow-glow">Edit Profile</button>
+          <button onClick={() => navigate("/edit-profile")} className="flex-1 rounded-xl bg-primary py-2.5 text-sm font-semibold text-primary-foreground transition-all hover:shadow-glow">Edit Profile</button>
           <button onClick={() => navigator.clipboard.writeText(window.location.href)} className="flex-1 rounded-xl bg-secondary py-2.5 text-sm font-semibold text-secondary-foreground transition-colors hover:bg-border">Share Profile</button>
         </div>
       </div>
 
       <div className="mt-6 flex border-b border-border">
         {tabs.map(({ id, icon: Icon, label }) => (
-          <button key={id} onClick={() => setActiveTab(id)} className={`flex flex-1 items-center justify-center gap-1.5 py-3 text-xs font-medium transition-colors ${activeTab === id ? "border-b-2 border-primary text-primary" : "text-muted-foreground hover:text-foreground"}`}>
+          <button key={id} onClick={() => id === "studio" ? navigate("/creator-studio") : setActiveTab(id)} className={`flex flex-1 items-center justify-center gap-1.5 py-3 text-xs font-medium transition-colors ${activeTab === id ? "border-b-2 border-primary text-primary" : "text-muted-foreground hover:text-foreground"}`}>
             <Icon className="h-4 w-4" />{label}
           </button>
         ))}
@@ -132,16 +131,6 @@ const Profile = () => {
         {activeTab === "liked" && (
           likedPosts.length === 0 ? <div className="py-12 text-center"><p className="text-sm text-muted-foreground">No liked posts</p></div>
           : <div className="divide-y divide-border">{likedPosts.map((p) => <PostCard key={p.id} post={p} />)}</div>
-        )}
-        {activeTab === "studio" && (
-          <div className="p-4">
-            <div className="rounded-xl border border-border bg-card p-6 text-center">
-              <BarChart3 className="mx-auto mb-3 h-10 w-10 text-gold" />
-              <h3 className="font-display text-lg font-semibold text-foreground">Creator Studio</h3>
-              <p className="mt-1 text-sm text-muted-foreground">Track your engagement and grow your audience.</p>
-              <button className="mt-4 rounded-xl gradient-gold px-6 py-2.5 text-sm font-semibold text-accent-foreground shadow-gold transition-all hover:opacity-90">Coming Soon</button>
-            </div>
-          </div>
         )}
       </div>
     </div>
