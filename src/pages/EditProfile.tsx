@@ -1,4 +1,4 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { ArrowLeft, Camera, Loader2 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
@@ -17,6 +17,8 @@ const EditProfile = () => {
   const [saving, setSaving] = useState(false);
   const [avatarFile, setAvatarFile] = useState<File | null>(null);
   const [avatarPreview, setAvatarPreview] = useState<string | null>(null);
+  const [form, setForm] = useState({ display_name: "", username: "", bio: "" });
+  const [initialized, setInitialized] = useState(false);
 
   const { data: profile, isLoading } = useQuery({
     queryKey: ["profile", user?.id],
@@ -27,31 +29,16 @@ const EditProfile = () => {
     enabled: !!user,
   });
 
-  const [form, setForm] = useState({
-    display_name: "",
-    username: "",
-    bio: "",
-  });
-
-  // Initialize form when profile loads
-  useState(() => {
-    if (profile) {
+  useEffect(() => {
+    if (profile && !initialized) {
       setForm({
         display_name: profile.display_name || "",
         username: profile.username || "",
         bio: profile.bio || "",
       });
+      setInitialized(true);
     }
-  });
-
-  // Update form when profile data arrives
-  if (profile && !form.display_name && !form.username && profile.display_name) {
-    setForm({
-      display_name: profile.display_name || "",
-      username: profile.username || "",
-      bio: profile.bio || "",
-    });
-  }
+  }, [profile, initialized]);
 
   const handleAvatarSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -116,7 +103,6 @@ const EditProfile = () => {
       </div>
 
       <div className="px-4 pt-6">
-        {/* Avatar */}
         <div className="flex justify-center">
           <div className="relative">
             <img
@@ -134,25 +120,14 @@ const EditProfile = () => {
           </div>
         </div>
 
-        {/* Form */}
         <div className="mt-8 space-y-5">
           <div>
             <label className="mb-1.5 block text-sm font-medium text-foreground">Display Name</label>
-            <Input
-              value={form.display_name}
-              onChange={(e) => setForm({ ...form, display_name: e.target.value })}
-              className="bg-card border-border"
-              placeholder="Your display name"
-            />
+            <Input value={form.display_name} onChange={(e) => setForm({ ...form, display_name: e.target.value })} className="bg-card border-border" placeholder="Your display name" />
           </div>
           <div>
             <label className="mb-1.5 block text-sm font-medium text-foreground">Username</label>
-            <Input
-              value={form.username}
-              onChange={(e) => setForm({ ...form, username: e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, "") })}
-              className="bg-card border-border"
-              placeholder="username"
-            />
+            <Input value={form.username} onChange={(e) => setForm({ ...form, username: e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, "") })} className="bg-card border-border" placeholder="username" />
           </div>
           <div>
             <label className="mb-1.5 block text-sm font-medium text-foreground">Bio</label>
