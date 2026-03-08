@@ -1,11 +1,12 @@
-import { Settings, Grid3X3, Bookmark, Heart, BarChart3, Loader2 } from "lucide-react";
+import { Settings as SettingsIcon, Grid3X3, Bookmark, Heart, BarChart3, Loader2 } from "lucide-react";
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { fetchPostsWithProfiles } from "@/lib/posts";
-import PostCard, { PostWithProfile } from "@/components/PostCard";
+import PostCard from "@/components/PostCard";
+import VerifiedBadge from "@/components/VerifiedBadge";
 import heroPattern from "@/assets/hero-pattern.jpg";
 
 const Profile = () => {
@@ -35,9 +36,8 @@ const Profile = () => {
     queryFn: async () => {
       const { data: saves } = await supabase.from("saves").select("post_id").eq("user_id", user!.id);
       if (!saves || saves.length === 0) return [];
-      const postIds = saves.map((s) => s.post_id);
       return fetchPostsWithProfiles(
-        supabase.from("posts").select("*").in("id", postIds).order("created_at", { ascending: false })
+        supabase.from("posts").select("*").in("id", saves.map((s) => s.post_id)).order("created_at", { ascending: false })
       );
     },
     enabled: !!user && activeTab === "saved",
@@ -48,12 +48,29 @@ const Profile = () => {
     queryFn: async () => {
       const { data: likes } = await supabase.from("likes").select("post_id").eq("user_id", user!.id);
       if (!likes || likes.length === 0) return [];
-      const postIds = likes.map((l) => l.post_id);
       return fetchPostsWithProfiles(
-        supabase.from("posts").select("*").in("id", postIds).order("created_at", { ascending: false })
+        supabase.from("posts").select("*").in("id", likes.map((l) => l.post_id)).order("created_at", { ascending: false })
       );
     },
     enabled: !!user && activeTab === "liked",
+  });
+
+  const { data: followersCount = 0 } = useQuery({
+    queryKey: ["followers-count", user?.id],
+    queryFn: async () => {
+      const { count } = await supabase.from("follows").select("*", { count: "exact", head: true }).eq("following_id", user!.id);
+      return count || 0;
+    },
+    enabled: !!user,
+  });
+
+  const { data: followingCount = 0 } = useQuery({
+    queryKey: ["following-count", user?.id],
+    queryFn: async () => {
+      const { count } = await supabase.from("follows").select("*", { count: "exact", head: true }).eq("follower_id", user!.id);
+      return count || 0;
+    },
+    enabled: !!user,
   });
 
   const tabs = [
@@ -67,6 +84,8 @@ const Profile = () => {
     return <div className="flex min-h-screen items-center justify-center"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>;
   }
 
+  const activePosts = activeTab === "posts" ? userPosts : activeTab === "saved" ? savedPosts : likedPosts;
+
   return (
     <div className="pb-20">
       <div className="relative h-36">
@@ -74,7 +93,7 @@ const Profile = () => {
         <div className="absolute inset-0 bg-gradient-to-b from-transparent to-background" />
         <div className="absolute right-3 top-3">
           <button onClick={() => navigate("/settings")} className="rounded-full bg-card/80 p-2 backdrop-blur-sm text-muted-foreground hover:text-foreground">
-            <Settings className="h-5 w-5" />
+            <SettingsIcon className="h-5 w-5" />
           </button>
         </div>
       </div>
@@ -84,9 +103,7 @@ const Profile = () => {
         <div className="mt-3">
           <div className="flex items-center gap-2">
             <h1 className="font-display text-xl font-bold text-foreground">{profile?.display_name || "User"}</h1>
-            {profile?.verified && (
-              <svg className="h-5 w-5 text-primary" viewBox="0 0 24 24" fill="currentColor"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41L9 16.17z" /></svg>
-            )}
+            {profile?.verified && <VerifiedBadge size="md" />}
           </div>
           <p className="text-sm text-muted-foreground">@{profile?.username || "user"}</p>
           <p className="mt-2 text-sm text-foreground">{profile?.bio || "No bio yet"}</p>
@@ -95,8 +112,8 @@ const Profile = () => {
         <div className="mt-4 flex gap-6">
           {[
             { label: "Posts", value: userPosts.length },
-            { label: "Followers", value: profile?.followers_count || 0 },
-            { label: "Following", value: profile?.following_count || 0 },
+            { label: "Followers", value: followersCount },
+            { label: "Following", value: followingCount },
           ].map(({ label, value }) => (
             <div key={label} className="text-center">
               <span className="block text-lg font-bold text-foreground">{value >= 1000 ? (value / 1000).toFixed(1) + "K" : value}</span>
@@ -120,17 +137,12 @@ const Profile = () => {
       </div>
 
       <div>
-        {activeTab === "posts" && (
-          userPosts.length === 0 ? <div className="py-12 text-center"><p className="text-sm text-muted-foreground">No posts yet</p></div>
-          : <div className="divide-y divide-border">{userPosts.map((p) => <PostCard key={p.id} post={p} />)}</div>
-        )}
-        {activeTab === "saved" && (
-          savedPosts.length === 0 ? <div className="py-12 text-center"><p className="text-sm text-muted-foreground">No saved posts</p></div>
-          : <div className="divide-y divide-border">{savedPosts.map((p) => <PostCard key={p.id} post={p} />)}</div>
-        )}
-        {activeTab === "liked" && (
-          likedPosts.length === 0 ? <div className="py-12 text-center"><p className="text-sm text-muted-foreground">No liked posts</p></div>
-          : <div className="divide-y divide-border">{likedPosts.map((p) => <PostCard key={p.id} post={p} />)}</div>
+        {activeTab !== "studio" && (
+          activePosts.length === 0 ? (
+            <div className="py-12 text-center"><p className="text-sm text-muted-foreground">No {activeTab} posts</p></div>
+          ) : (
+            <div className="divide-y divide-border">{activePosts.map((p) => <PostCard key={p.id} post={p} />)}</div>
+          )
         )}
       </div>
     </div>
