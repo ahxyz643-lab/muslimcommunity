@@ -62,6 +62,9 @@ const PostCard = ({ post, onDelete }: { post: PostWithProfile; onDelete?: (id: s
       setLiked(false);
       setLikesCount((c) => Math.max(0, c - 1));
     } else {
+      // Check if already liked (prevent duplicate)
+      const { data: existing } = await supabase.from("likes").select("id").eq("user_id", user.id).eq("post_id", post.id).maybeSingle();
+      if (existing) return;
       await supabase.from("likes").insert({ user_id: user.id, post_id: post.id });
       setLiked(true);
       setLikesCount((c) => c + 1);
@@ -88,6 +91,9 @@ const PostCard = ({ post, onDelete }: { post: PostWithProfile; onDelete?: (id: s
       setReposted(false);
       setRepostsCount((c) => Math.max(0, c - 1));
     } else {
+      // Check if already reposted (prevent duplicate)
+      const { data: existing } = await supabase.from("reposts").select("id").eq("user_id", user.id).eq("post_id", post.id).maybeSingle();
+      if (existing) return;
       await supabase.from("reposts").insert({ user_id: user.id, post_id: post.id });
       setReposted(true);
       setRepostsCount((c) => c + 1);
@@ -123,7 +129,10 @@ const PostCard = ({ post, onDelete }: { post: PostWithProfile; onDelete?: (id: s
     setIsPlaying(!isPlaying);
   };
 
-  const formatCount = (n: number) => n >= 1000 ? (n / 1000).toFixed(1) + "K" : n.toString();
+  const formatCount = (n: number) => {
+    if (n <= 0) return "";
+    return n >= 1000 ? (n / 1000).toFixed(1) + "K" : n.toString();
+  };
 
   const profile = post.profiles;
   const timeAgo = formatDistanceToNow(new Date(post.created_at), { addSuffix: false });

@@ -35,6 +35,7 @@ const Messages = () => {
   const [showNewChat, setShowNewChat] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [sending, setSending] = useState(false);
+  const [realtimeMessages, setRealtimeMessages] = useState<Message[]>([]);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   // Fetch conversations
@@ -50,7 +51,6 @@ const Messages = () => {
 
       const convoIds = participants.map((p) => p.conversation_id);
 
-      // Get other participants
       const { data: allParticipants } = await supabase
         .from("conversation_participants")
         .select("conversation_id, user_id")
@@ -67,7 +67,6 @@ const Messages = () => {
 
       const profileMap = new Map(profiles?.map((p) => [p.user_id, p]) || []);
 
-      // Get last messages
       const convos: Conversation[] = [];
       for (const p of allParticipants) {
         const prof = profileMap.get(p.user_id);
@@ -99,7 +98,7 @@ const Messages = () => {
   });
 
   // Fetch messages for active conversation
-  const { data: messages = [] } = useQuery({
+  const { data: fetchedMessages = [] } = useQuery({
     queryKey: ["messages", activeConvo?.id],
     queryFn: async () => {
       const { data } = await supabase
@@ -110,17 +109,29 @@ const Messages = () => {
       return (data as Message[]) || [];
     },
     enabled: !!activeConvo,
-    refetchInterval: 3000,
   });
 
-  // Real-time messages
+  // Sync fetched messages into realtime state
+  useEffect(() => {
+    setRealtimeMessages(fetchedMessages);
+  }, [fetchedMessages]);
+
+  // Real-time messages subscription
   useEffect(() => {
     if (!activeConvo) return;
     const channel = supabase
-      .channel(`messages-${activeConvo.id}`)
-      .on("postgres_changes", { event: "INSERT", schema: "public", table: "messages", filter: `conversation_id=eq.${activeConvo.id}` }, () => {
-        queryClient.invalidateQueries({ queryKey: ["messages", activeConvo.id] });
-      })
+      .channel(`chat-${activeConvo.id}`)
+      .on(
+        "postgres_changes",
+        { event: "INSERT", schema: "public", table: "messages", filter: `conversation_id=eq.${activeConvo.id}` },
+        (payload) => {
+          const newMsg = payload.new as Message;
+          setRealtimeMessages((prev) => {
+            if (prev.some((m) => m.id === newMsg.id)) return prev;
+            return [...prev, newMsg];
+          });
+        }
+      )
       .subscribe();
     return () => { supabase.removeChannel(channel); };
   }, [activeConvo?.id]);
@@ -128,7 +139,7 @@ const Messages = () => {
   // Scroll to bottom
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages]);
+  }, [realtimeMessages]);
 
   // Search users for new chat
   const { data: searchResults = [] } = useQuery({
@@ -148,7 +159,6 @@ const Messages = () => {
   const startConversation = async (otherUserId: string) => {
     if (!user) return;
 
-    // Check if conversation already exists
     const existing = conversations.find((c) => c.otherUser.user_id === otherUserId);
     if (existing) {
       setActiveConvo(existing);
@@ -157,7 +167,6 @@ const Messages = () => {
       return;
     }
 
-    // Create new conversation
     const { data: convo, error: convoErr } = await supabase.from("conversations").insert({}).select().single();
     if (convoErr || !convo) return;
 
@@ -178,16 +187,18 @@ const Messages = () => {
   };
 
   const sendMessage = async () => {
-    if (!user || !activeConvo || !newMessage.trim()) return;
+    if (!user || !activeConvo || !newMessage.trim() || sending) return;
     setSending(true);
+    const content = newMessage.trim();
+    setNewMessage("");
+
     await supabase.from("messages").insert({
       conversation_id: activeConvo.id,
       sender_id: user.id,
-      content: newMessage.trim(),
+      content,
     });
-    setNewMessage("");
+
     setSending(false);
-    queryClient.invalidateQueries({ queryKey: ["messages", activeConvo.id] });
     queryClient.invalidateQueries({ queryKey: ["conversations"] });
   };
 
@@ -196,7 +207,7 @@ const Messages = () => {
     return (
       <div className="flex min-h-screen flex-col pb-20">
         <div className="flex items-center gap-3 border-b border-border px-4 py-3">
-          <button onClick={() => setActiveConvo(null)} className="text-muted-foreground hover:text-foreground">
+          <button onClick={() => { setActiveConvo(null); setRealtimeMessages([]); }} className="text-muted-foreground hover:text-foreground">
             <ArrowLeft className="h-6 w-6" />
           </button>
           <img src={activeConvo.otherUser.avatar_url || "https://i.pravatar.cc/150"} alt="" className="h-9 w-9 rounded-full object-cover" />
@@ -207,7 +218,7 @@ const Messages = () => {
         </div>
 
         <div className="flex-1 overflow-y-auto px-4 py-4 space-y-3">
-          {messages.map((msg) => (
+          {realtimeMessages.map((msg) => (
             <div key={msg.id} className={`flex ${msg.sender_id === user?.id ? "justify-end" : "justify-start"}`}>
               <div className={`max-w-[75%] rounded-2xl px-4 py-2.5 text-sm ${
                 msg.sender_id === user?.id
@@ -291,13 +302,6 @@ const Messages = () => {
         <button onClick={() => setShowNewChat(true)} className="rounded-full p-2 text-muted-foreground hover:bg-secondary hover:text-foreground">
           <Edit className="h-5 w-5" />
         </button>
-      </div>
-
-      <div className="px-4 py-3">
-        <div className="flex items-center gap-3 rounded-xl bg-secondary px-4 py-2.5">
-          <Search className="h-4 w-4 text-muted-foreground" />
-          <input placeholder="Search messages..." className="w-full bg-transparent text-sm text-foreground placeholder:text-muted-foreground focus:outline-none" />
-        </div>
       </div>
 
       {convosLoading ? (
