@@ -62,6 +62,9 @@ const PostCard = ({ post, onDelete }: { post: PostWithProfile; onDelete?: (id: s
       setLiked(false);
       setLikesCount((c) => Math.max(0, c - 1));
     } else {
+      // Check if already liked (prevent duplicate)
+      const { data: existing } = await supabase.from("likes").select("id").eq("user_id", user.id).eq("post_id", post.id).maybeSingle();
+      if (existing) return;
       await supabase.from("likes").insert({ user_id: user.id, post_id: post.id });
       setLiked(true);
       setLikesCount((c) => c + 1);
