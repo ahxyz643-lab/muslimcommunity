@@ -60,7 +60,7 @@ const PostCard = ({ post, onDelete }: { post: PostWithProfile; onDelete?: (id: s
     if (liked) {
       await supabase.from("likes").delete().eq("user_id", user.id).eq("post_id", post.id);
       setLiked(false);
-      setLikesCount((c) => c - 1);
+      setLikesCount((c) => Math.max(0, c - 1));
     } else {
       await supabase.from("likes").insert({ user_id: user.id, post_id: post.id });
       setLiked(true);
@@ -73,7 +73,7 @@ const PostCard = ({ post, onDelete }: { post: PostWithProfile; onDelete?: (id: s
     if (saved) {
       await supabase.from("saves").delete().eq("user_id", user.id).eq("post_id", post.id);
       setSaved(false);
-      setSavesCount((c) => c - 1);
+      setSavesCount((c) => Math.max(0, c - 1));
     } else {
       await supabase.from("saves").insert({ user_id: user.id, post_id: post.id });
       setSaved(true);
@@ -86,7 +86,7 @@ const PostCard = ({ post, onDelete }: { post: PostWithProfile; onDelete?: (id: s
     if (reposted) {
       await supabase.from("reposts").delete().eq("user_id", user.id).eq("post_id", post.id);
       setReposted(false);
-      setRepostsCount((c) => c - 1);
+      setRepostsCount((c) => Math.max(0, c - 1));
     } else {
       await supabase.from("reposts").insert({ user_id: user.id, post_id: post.id });
       setReposted(true);
