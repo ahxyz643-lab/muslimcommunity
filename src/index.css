@@ -107,6 +107,7 @@
     --shadow-glow: 0 0 20px hsl(155 60% 35% / 0.2);
     --shadow-gold: 0 0 20px hsl(42 80% 50% / 0.15);
   }
+}
 
 @layer base {
   * {
