@@ -73,7 +73,7 @@ const PostCard = ({ post, onDelete }: { post: PostWithProfile; onDelete?: (id: s
     if (saved) {
       await supabase.from("saves").delete().eq("user_id", user.id).eq("post_id", post.id);
       setSaved(false);
-      setSavesCount((c) => c - 1);
+      setSavesCount((c) => Math.max(0, c - 1));
     } else {
       await supabase.from("saves").insert({ user_id: user.id, post_id: post.id });
       setSaved(true);
