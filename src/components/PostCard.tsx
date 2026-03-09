@@ -86,7 +86,7 @@ const PostCard = ({ post, onDelete }: { post: PostWithProfile; onDelete?: (id: s
     if (reposted) {
       await supabase.from("reposts").delete().eq("user_id", user.id).eq("post_id", post.id);
       setReposted(false);
-      setRepostsCount((c) => c - 1);
+      setRepostsCount((c) => Math.max(0, c - 1));
     } else {
       await supabase.from("reposts").insert({ user_id: user.id, post_id: post.id });
       setReposted(true);
