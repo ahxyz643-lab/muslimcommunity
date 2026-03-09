@@ -129,7 +129,10 @@ const PostCard = ({ post, onDelete }: { post: PostWithProfile; onDelete?: (id: s
     setIsPlaying(!isPlaying);
   };
 
-  const formatCount = (n: number) => n >= 1000 ? (n / 1000).toFixed(1) + "K" : n.toString();
+  const formatCount = (n: number) => {
+    if (n <= 0) return "";
+    return n >= 1000 ? (n / 1000).toFixed(1) + "K" : n.toString();
+  };
 
   const profile = post.profiles;
   const timeAgo = formatDistanceToNow(new Date(post.created_at), { addSuffix: false });
