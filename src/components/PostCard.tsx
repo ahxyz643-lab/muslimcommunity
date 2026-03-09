@@ -91,6 +91,9 @@ const PostCard = ({ post, onDelete }: { post: PostWithProfile; onDelete?: (id: s
       setReposted(false);
       setRepostsCount((c) => Math.max(0, c - 1));
     } else {
+      // Check if already reposted (prevent duplicate)
+      const { data: existing } = await supabase.from("reposts").select("id").eq("user_id", user.id).eq("post_id", post.id).maybeSingle();
+      if (existing) return;
       await supabase.from("reposts").insert({ user_id: user.id, post_id: post.id });
       setReposted(true);
       setRepostsCount((c) => c + 1);
