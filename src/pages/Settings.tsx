@@ -39,6 +39,7 @@ const Settings = () => {
       title: "Support",
       items: [
         { icon: HelpCircle, label: "Help & Support", action: () => {} },
+        { icon: Crown, label: "Admin Panel", action: () => navigate("/admin") },
       ],
     },
   ];
