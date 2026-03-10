@@ -1,4 +1,4 @@
-import { ArrowLeft, User, Shield, Bell, Moon, Sun, Monitor, HelpCircle, LogOut, ChevronRight, Activity } from "lucide-react";
+import { ArrowLeft, User, Shield, Bell, Moon, Sun, Monitor, HelpCircle, LogOut, ChevronRight, Activity, Crown } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { useTheme } from "@/contexts/ThemeContext";
@@ -39,6 +39,7 @@ const Settings = () => {
       title: "Support",
       items: [
         { icon: HelpCircle, label: "Help & Support", action: () => {} },
+        { icon: Crown, label: "Admin Panel", action: () => navigate("/admin") },
       ],
     },
   ];
