@@ -20,6 +20,7 @@ import CreatorStudio from "@/pages/CreatorStudio";
 import Auth from "@/pages/Auth";
 import Welcome from "@/pages/Welcome";
 import UserProfilePage from "@/pages/UserProfilePage";
+import Admin from "@/pages/Admin";
 import NotFound from "@/pages/NotFound";
 
 const queryClient = new QueryClient();
