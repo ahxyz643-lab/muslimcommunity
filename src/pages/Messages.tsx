@@ -141,20 +141,27 @@ const Messages = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [realtimeMessages]);
 
-  // Search users for new chat
-  const { data: searchResults = [] } = useQuery({
-    queryKey: ["search-users", searchQuery],
+  // Fetch all users for new chat (filter client-side by search)
+  const { data: allUsers = [] } = useQuery({
+    queryKey: ["all-users-chat"],
     queryFn: async () => {
       const { data } = await supabase
         .from("profiles")
         .select("user_id, display_name, username, avatar_url")
         .neq("user_id", user!.id)
-        .or(`username.ilike.%${searchQuery}%,display_name.ilike.%${searchQuery}%`)
-        .limit(10);
+        .order("display_name", { ascending: true })
+        .limit(50);
       return data || [];
     },
-    enabled: !!user && showNewChat && searchQuery.length > 0,
+    enabled: !!user && showNewChat,
   });
+
+  const searchResults = searchQuery.length > 0
+    ? allUsers.filter((p) =>
+        (p.username || "").toLowerCase().includes(searchQuery.toLowerCase()) ||
+        (p.display_name || "").toLowerCase().includes(searchQuery.toLowerCase())
+      )
+    : allUsers;
 
   const startConversation = async (otherUserId: string) => {
     if (!user) return;
