@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { ArrowLeft, MessageCircle, Loader as Loader2, Grid3x3 as Grid3X3, Crown, ShieldCheck, BookOpen } from "lucide-react";
+import { ArrowLeft, MessageCircle, Loader2, Grid3X3 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -36,14 +36,6 @@ const UserProfile = ({ userId }: { userId: string }) => {
     queryFn: () => fetchPostsWithProfiles(
       supabase.from("posts").select("*").eq("user_id", userId).order("created_at", { ascending: false })
     ),
-  });
-
-  const { data: userRoles = [] } = useQuery({
-    queryKey: ["user-roles", userId],
-    queryFn: async () => {
-      const { data } = await supabase.from("user_roles").select("role").eq("user_id", userId);
-      return data || [];
-    },
   });
 
   const [followLoading, setFollowLoading] = useState(false);
@@ -86,12 +78,9 @@ const UserProfile = ({ userId }: { userId: string }) => {
             className="h-20 w-20 rounded-full object-cover ring-2 ring-primary"
           />
           <div className="flex-1">
-            <div className="flex items-center gap-1.5 flex-wrap">
+            <div className="flex items-center gap-1.5">
               <h2 className="text-lg font-bold text-foreground">{profile?.display_name || "User"}</h2>
               {profile?.verified && <VerifiedBadge size="md" />}
-              {userRoles.some(r => r.role === "admin") && <Crown className="h-4 w-4 text-amber-500" title="Admin" />}
-              {userRoles.some(r => r.role === "moderator") && <ShieldCheck className="h-4 w-4 text-primary" title="Moderator" />}
-              {userRoles.some(r => r.role === "scholar") && <BookOpen className="h-4 w-4 text-emerald-500" title="Scholar" />}
             </div>
             <p className="text-sm text-muted-foreground">@{profile?.username || "user"}</p>
           </div>

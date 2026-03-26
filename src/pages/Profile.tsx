@@ -1,4 +1,4 @@
-import { Settings as SettingsIcon, Grid3x3 as Grid3X3, Bookmark, Heart, ChartBar as BarChart3, Loader as Loader2, Crown, ShieldCheck, BookOpen } from "lucide-react";
+import { Settings as SettingsIcon, Grid3X3, Bookmark, Heart, BarChart3, Loader2 } from "lucide-react";
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
@@ -73,15 +73,6 @@ const Profile = () => {
     enabled: !!user,
   });
 
-  const { data: userRoles = [] } = useQuery({
-    queryKey: ["user-roles", user?.id],
-    queryFn: async () => {
-      const { data } = await supabase.from("user_roles").select("role").eq("user_id", user!.id);
-      return data || [];
-    },
-    enabled: !!user,
-  });
-
   const tabs = [
     { id: "posts", icon: Grid3X3, label: "Posts" },
     { id: "saved", icon: Bookmark, label: "Saved" },
@@ -110,12 +101,9 @@ const Profile = () => {
       <div className="relative px-4">
         <img src={profile?.avatar_url || "https://i.pravatar.cc/150"} alt={profile?.display_name || ""} className="-mt-12 h-24 w-24 rounded-full border-4 border-card object-cover ring-2 ring-primary" />
         <div className="mt-3">
-          <div className="flex items-center gap-2 flex-wrap">
+          <div className="flex items-center gap-2">
             <h1 className="font-display text-xl font-bold text-foreground">{profile?.display_name || "User"}</h1>
             {profile?.verified && <VerifiedBadge size="md" />}
-            {userRoles.some(r => r.role === "admin") && <Crown className="h-5 w-5 text-amber-500" title="Admin" />}
-            {userRoles.some(r => r.role === "moderator") && <ShieldCheck className="h-5 w-5 text-primary" title="Moderator" />}
-            {userRoles.some(r => r.role === "scholar") && <BookOpen className="h-5 w-5 text-emerald-500" title="Scholar" />}
           </div>
           <p className="text-sm text-muted-foreground">@{profile?.username || "user"}</p>
           <p className="mt-2 text-sm text-foreground">{profile?.bio || "No bio yet"}</p>
