@@ -76,15 +76,12 @@ const CommentsSheet = ({ postId, onClose, onCountChange }: { postId: string; onC
   const handleSend = async () => {
     if (!user || !newComment.trim()) return;
     setSending(true);
-    const insertData: Record<string, string> = {
+    const { error } = await supabase.from("comments").insert({
       post_id: postId,
       user_id: user.id,
       content: newComment.trim(),
-    };
-    if (replyTo) {
-      insertData.parent_id = replyTo.id;
-    }
-    const { error } = await supabase.from("comments").insert(insertData);
+      parent_id: replyTo?.id ?? null,
+    });
     if (error) {
       toast({ title: "Error", description: error.message, variant: "destructive" });
     } else {
