@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { X, Send, Loader2, Trash2 } from "lucide-react";
+import { X, Send, Loader2, Trash2, Reply, CornerDownRight } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
@@ -10,12 +10,14 @@ interface Comment {
   content: string;
   user_id: string;
   created_at: string;
+  parent_id: string | null;
   profile?: {
     display_name: string | null;
     username: string | null;
     avatar_url: string | null;
     verified: boolean;
   };
+  replies?: Comment[];
 }
 
 const CommentsSheet = ({ postId, onClose, onCountChange }: { postId: string; onClose: () => void; onCountChange?: (delta: number) => void }) => {
@@ -25,6 +27,7 @@ const CommentsSheet = ({ postId, onClose, onCountChange }: { postId: string; onC
   const [newComment, setNewComment] = useState("");
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
+  const [replyTo, setReplyTo] = useState<Comment | null>(null);
 
   const fetchComments = async () => {
     const { data } = await supabase
@@ -42,25 +45,51 @@ const CommentsSheet = ({ postId, onClose, onCountChange }: { postId: string; onC
       .in("user_id", userIds);
 
     const profileMap = new Map(profiles?.map((p) => [p.user_id, p]) || []);
+    const allComments: Comment[] = data.map((c) => ({ ...c, profile: profileMap.get(c.user_id), replies: [] }));
 
-    setComments(data.map((c) => ({ ...c, profile: profileMap.get(c.user_id) })));
+    // Build tree: separate top-level and replies
+    const topLevel: Comment[] = [];
+    const replyMap = new Map<string, Comment[]>();
+
+    allComments.forEach((c) => {
+      if (!c.parent_id) {
+        topLevel.push(c);
+      } else {
+        const arr = replyMap.get(c.parent_id) || [];
+        arr.push(c);
+        replyMap.set(c.parent_id, arr);
+      }
+    });
+
+    topLevel.forEach((c) => {
+      c.replies = replyMap.get(c.id) || [];
+    });
+
+    setComments(topLevel);
     setLoading(false);
   };
 
   useEffect(() => { fetchComments(); }, [postId]);
 
+  const totalCount = comments.reduce((acc, c) => acc + 1 + (c.replies?.length || 0), 0);
+
   const handleSend = async () => {
     if (!user || !newComment.trim()) return;
     setSending(true);
-    const { error } = await supabase.from("comments").insert({
+    const insertData: Record<string, string> = {
       post_id: postId,
       user_id: user.id,
       content: newComment.trim(),
-    });
+    };
+    if (replyTo) {
+      insertData.parent_id = replyTo.id;
+    }
+    const { error } = await supabase.from("comments").insert(insertData);
     if (error) {
       toast({ title: "Error", description: error.message, variant: "destructive" });
     } else {
       setNewComment("");
+      setReplyTo(null);
       onCountChange?.(1);
       fetchComments();
     }
@@ -69,9 +98,47 @@ const CommentsSheet = ({ postId, onClose, onCountChange }: { postId: string; onC
 
   const handleDelete = async (id: string) => {
     await supabase.from("comments").delete().eq("id", id);
-    setComments((prev) => prev.filter((c) => c.id !== id));
     onCountChange?.(-1);
+    fetchComments();
   };
+
+  const CommentItem = ({ c, isReply = false }: { c: Comment; isReply?: boolean }) => (
+    <div className={`flex gap-2.5 ${isReply ? "ml-10" : ""}`}>
+      {isReply && <CornerDownRight className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0 mt-1" />}
+      <img
+        src={c.profile?.avatar_url || "https://i.pravatar.cc/150?u=" + c.user_id}
+        alt=""
+        className={`${isReply ? "h-6 w-6" : "h-8 w-8"} rounded-full object-cover flex-shrink-0`}
+      />
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center gap-1.5">
+          <span className="text-xs font-semibold text-foreground">{c.profile?.display_name || "User"}</span>
+          {c.profile?.verified && (
+            <svg className="h-3.5 w-3.5 text-blue-500" viewBox="0 0 24 24" fill="currentColor">
+              <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41L9 16.17z" />
+            </svg>
+          )}
+          <span className="text-[10px] text-muted-foreground">
+            {formatDistanceToNow(new Date(c.created_at), { addSuffix: false })}
+          </span>
+        </div>
+        <p className="text-sm text-foreground mt-0.5">{c.content}</p>
+        {!isReply && user && (
+          <button
+            onClick={() => { setReplyTo(c); }}
+            className="flex items-center gap-1 mt-1 text-[11px] text-muted-foreground hover:text-primary transition-colors"
+          >
+            <Reply className="h-3 w-3" /> Reply
+          </button>
+        )}
+      </div>
+      {user?.id === c.user_id && (
+        <button onClick={() => handleDelete(c.id)} className="text-muted-foreground hover:text-destructive flex-shrink-0">
+          <Trash2 className="h-3.5 w-3.5" />
+        </button>
+      )}
+    </div>
+  );
 
   return (
     <div className="fixed inset-0 z-[60] flex flex-col">
@@ -79,7 +146,7 @@ const CommentsSheet = ({ postId, onClose, onCountChange }: { postId: string; onC
       <div className="animate-slide-up max-h-[75vh] min-h-[40vh] flex flex-col rounded-t-2xl border-t border-border bg-card pb-safe">
         {/* Header */}
         <div className="flex items-center justify-between px-4 py-3 border-b border-border">
-          <h3 className="text-sm font-semibold text-foreground">Comments ({comments.length})</h3>
+          <h3 className="text-sm font-semibold text-foreground">Comments ({totalCount})</h3>
           <button onClick={onClose} className="text-muted-foreground hover:text-foreground">
             <X className="h-5 w-5" />
           </button>
@@ -89,35 +156,15 @@ const CommentsSheet = ({ postId, onClose, onCountChange }: { postId: string; onC
         <div className="flex-1 overflow-y-auto px-4 py-3 space-y-4">
           {loading ? (
             <div className="flex justify-center py-8"><Loader2 className="h-5 w-5 animate-spin text-primary" /></div>
-          ) : comments.length === 0 ? (
+          ) : totalCount === 0 ? (
             <p className="text-center text-sm text-muted-foreground py-8">No comments yet. Be the first!</p>
           ) : (
             comments.map((c) => (
-              <div key={c.id} className="flex gap-3">
-                <img
-                  src={c.profile?.avatar_url || "https://i.pravatar.cc/150"}
-                  alt=""
-                  className="h-8 w-8 rounded-full object-cover flex-shrink-0"
-                />
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-1.5">
-                    <span className="text-xs font-semibold text-foreground">{c.profile?.display_name || "User"}</span>
-                    {c.profile?.verified && (
-                      <svg className="h-3.5 w-3.5 text-blue-500" viewBox="0 0 24 24" fill="currentColor">
-                        <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41L9 16.17z" />
-                      </svg>
-                    )}
-                    <span className="text-[10px] text-muted-foreground">
-                      {formatDistanceToNow(new Date(c.created_at), { addSuffix: false })}
-                    </span>
-                  </div>
-                  <p className="text-sm text-foreground mt-0.5">{c.content}</p>
-                </div>
-                {user?.id === c.user_id && (
-                  <button onClick={() => handleDelete(c.id)} className="text-muted-foreground hover:text-destructive flex-shrink-0">
-                    <Trash2 className="h-3.5 w-3.5" />
-                  </button>
-                )}
+              <div key={c.id} className="space-y-3">
+                <CommentItem c={c} />
+                {c.replies?.map((r) => (
+                  <CommentItem key={r.id} c={r} isReply />
+                ))}
               </div>
             ))
           )}
@@ -126,6 +173,17 @@ const CommentsSheet = ({ postId, onClose, onCountChange }: { postId: string; onC
         {/* Typing bar */}
         {user && (
           <div className="border-t border-border px-4 py-3 bg-card">
+            {replyTo && (
+              <div className="flex items-center justify-between px-2 pb-2">
+                <span className="text-[11px] text-muted-foreground">
+                  <Reply className="h-3 w-3 inline mr-1" />
+                  Replying to <span className="font-semibold text-foreground">{replyTo.profile?.display_name || "User"}</span>
+                </span>
+                <button onClick={() => setReplyTo(null)} className="text-muted-foreground hover:text-foreground">
+                  <X className="h-3.5 w-3.5" />
+                </button>
+              </div>
+            )}
             {newComment.trim().length > 0 && (
               <div className="flex items-center gap-1.5 px-2 pb-2">
                 <span className="flex gap-0.5">
@@ -148,8 +206,9 @@ const CommentsSheet = ({ postId, onClose, onCountChange }: { postId: string; onC
                   value={newComment}
                   onChange={(e) => setNewComment(e.target.value)}
                   onKeyDown={(e) => e.key === "Enter" && !e.shiftKey && handleSend()}
-                  placeholder="Add a comment..."
+                  placeholder={replyTo ? `Reply to ${replyTo.profile?.display_name || "User"}...` : "Add a comment..."}
                   className="w-full rounded-full bg-secondary px-4 py-2.5 pr-10 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary/30 transition-all"
+                  autoFocus={!!replyTo}
                 />
                 {newComment.trim().length > 0 && (
                   <span className="absolute right-12 top-1/2 -translate-y-1/2 text-[10px] text-muted-foreground">
