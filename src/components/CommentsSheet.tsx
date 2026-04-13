@@ -74,9 +74,9 @@ const CommentsSheet = ({ postId, onClose, onCountChange }: { postId: string; onC
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex flex-col">
+    <div className="fixed inset-0 z-[60] flex flex-col">
       <div className="flex-1 bg-background/60 backdrop-blur-sm" onClick={onClose} />
-      <div className="animate-slide-up max-h-[70vh] flex flex-col rounded-t-2xl border-t border-border bg-card">
+      <div className="animate-slide-up max-h-[75vh] min-h-[40vh] flex flex-col rounded-t-2xl border-t border-border bg-card pb-safe">
         {/* Header */}
         <div className="flex items-center justify-between px-4 py-3 border-b border-border">
           <h3 className="text-sm font-semibold text-foreground">Comments ({comments.length})</h3>
