@@ -123,21 +123,44 @@ const CommentsSheet = ({ postId, onClose, onCountChange }: { postId: string; onC
           )}
         </div>
 
-        {/* Input */}
+        {/* Typing bar */}
         {user && (
-          <div className="border-t border-border px-4 py-3">
+          <div className="border-t border-border px-4 py-3 bg-card">
+            {newComment.trim().length > 0 && (
+              <div className="flex items-center gap-1.5 px-2 pb-2">
+                <span className="flex gap-0.5">
+                  <span className="h-1.5 w-1.5 rounded-full bg-primary animate-bounce" style={{ animationDelay: "0ms" }} />
+                  <span className="h-1.5 w-1.5 rounded-full bg-primary animate-bounce" style={{ animationDelay: "150ms" }} />
+                  <span className="h-1.5 w-1.5 rounded-full bg-primary animate-bounce" style={{ animationDelay: "300ms" }} />
+                </span>
+                <span className="text-[11px] text-muted-foreground">typing...</span>
+              </div>
+            )}
             <div className="flex items-center gap-2">
-              <input
-                value={newComment}
-                onChange={(e) => setNewComment(e.target.value)}
-                onKeyDown={(e) => e.key === "Enter" && handleSend()}
-                placeholder="Add a comment..."
-                className="flex-1 rounded-full bg-secondary px-4 py-2.5 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none"
+              <img
+                src={undefined}
+                alt=""
+                className="h-8 w-8 rounded-full object-cover flex-shrink-0 bg-muted"
+                onError={(e) => { (e.target as HTMLImageElement).src = "https://i.pravatar.cc/150?u=" + user.id; }}
               />
+              <div className="flex-1 relative">
+                <input
+                  value={newComment}
+                  onChange={(e) => setNewComment(e.target.value)}
+                  onKeyDown={(e) => e.key === "Enter" && !e.shiftKey && handleSend()}
+                  placeholder="Add a comment..."
+                  className="w-full rounded-full bg-secondary px-4 py-2.5 pr-10 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary/30 transition-all"
+                />
+                {newComment.trim().length > 0 && (
+                  <span className="absolute right-12 top-1/2 -translate-y-1/2 text-[10px] text-muted-foreground">
+                    {newComment.trim().length}/500
+                  </span>
+                )}
+              </div>
               <button
                 onClick={handleSend}
                 disabled={!newComment.trim() || sending}
-                className="flex h-10 w-10 items-center justify-center rounded-full bg-primary text-primary-foreground disabled:opacity-40"
+                className="flex h-10 w-10 items-center justify-center rounded-full bg-primary text-primary-foreground disabled:opacity-40 transition-transform active:scale-90"
               >
                 {sending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
               </button>
