@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { Search, Edit, ArrowLeft, Send, Loader2 } from "lucide-react";
+import { Search, Edit, ArrowLeft, Send, Loader2, Check, CheckCheck } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
@@ -124,18 +124,39 @@ const Messages = () => {
       .channel(`chat-${activeConvo.id}`)
       .on(
         "postgres_changes",
-        { event: "INSERT", schema: "public", table: "messages", filter: `conversation_id=eq.${activeConvo.id}` },
+        { event: "*", schema: "public", table: "messages", filter: `conversation_id=eq.${activeConvo.id}` },
         (payload) => {
-          const newMsg = payload.new as Message;
-          setRealtimeMessages((prev) => {
-            if (prev.some((m) => m.id === newMsg.id)) return prev;
-            return [...prev, newMsg];
-          });
+          if (payload.eventType === "INSERT") {
+            const newMsg = payload.new as Message;
+            setRealtimeMessages((prev) => {
+              if (prev.some((m) => m.id === newMsg.id)) return prev;
+              return [...prev, newMsg];
+            });
+          } else if (payload.eventType === "UPDATE") {
+            const updated = payload.new as Message;
+            setRealtimeMessages((prev) =>
+              prev.map((m) => (m.id === updated.id ? updated : m))
+            );
+          }
         }
       )
       .subscribe();
     return () => { supabase.removeChannel(channel); };
   }, [activeConvo?.id]);
+
+  // Mark unread messages as read
+  useEffect(() => {
+    if (!activeConvo || !user || realtimeMessages.length === 0) return;
+    const unreadIds = realtimeMessages
+      .filter((m) => m.sender_id !== user.id && !m.read_at)
+      .map((m) => m.id);
+    if (unreadIds.length === 0) return;
+    supabase
+      .from("messages")
+      .update({ read_at: new Date().toISOString() })
+      .in("id", unreadIds)
+      .then();
+  }, [realtimeMessages, activeConvo?.id, user?.id]);
 
   // Scroll to bottom
   useEffect(() => {
@@ -240,9 +261,16 @@ const Messages = () => {
                   : "bg-card text-foreground border border-border rounded-bl-md"
               }`}>
                 <p>{msg.content}</p>
-                <p className={`mt-1 text-[10px] ${msg.sender_id === user?.id ? "text-primary-foreground/60" : "text-muted-foreground"}`}>
-                  {formatDistanceToNow(new Date(msg.created_at), { addSuffix: false })}
-                </p>
+                <div className={`mt-1 flex items-center gap-1 ${msg.sender_id === user?.id ? "justify-end" : ""}`}>
+                  <span className={`text-[10px] ${msg.sender_id === user?.id ? "text-primary-foreground/60" : "text-muted-foreground"}`}>
+                    {formatDistanceToNow(new Date(msg.created_at), { addSuffix: false })}
+                  </span>
+                  {msg.sender_id === user?.id && (
+                    msg.read_at
+                      ? <CheckCheck className="h-3.5 w-3.5 text-blue-400" />
+                      : <Check className="h-3.5 w-3.5 text-primary-foreground/50" />
+                  )}
+                </div>
               </div>
             </div>
           ))}
