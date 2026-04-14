@@ -179,17 +179,23 @@ const Messages = () => {
       return;
     }
 
-    const { data: convo, error: convoErr } = await supabase.from("conversations").insert({}).select().single();
-    if (convoErr || !convo) return;
+    // Generate ID client-side so we can use it immediately
+    const convoId = crypto.randomUUID();
 
-    await supabase.from("conversation_participants").insert([
-      { conversation_id: convo.id, user_id: user.id },
-      { conversation_id: convo.id, user_id: otherUserId },
+    // Insert conversation without .select() to avoid SELECT RLS check before participants exist
+    const { error: convoErr } = await supabase.from("conversations").insert({ id: convoId });
+    if (convoErr) { console.error("Failed to create conversation:", convoErr); return; }
+
+    // Add both participants
+    const { error: partErr } = await supabase.from("conversation_participants").insert([
+      { conversation_id: convoId, user_id: user.id },
+      { conversation_id: convoId, user_id: otherUserId },
     ]);
+    if (partErr) { console.error("Failed to add participants:", partErr); return; }
 
     const profile = searchResults.find((p) => p.user_id === otherUserId);
     setActiveConvo({
-      id: convo.id,
+      id: convoId,
       otherUser: profile || { user_id: otherUserId, display_name: null, username: null, avatar_url: null },
       unread: 0,
     });
