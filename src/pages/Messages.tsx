@@ -124,18 +124,39 @@ const Messages = () => {
       .channel(`chat-${activeConvo.id}`)
       .on(
         "postgres_changes",
-        { event: "INSERT", schema: "public", table: "messages", filter: `conversation_id=eq.${activeConvo.id}` },
+        { event: "*", schema: "public", table: "messages", filter: `conversation_id=eq.${activeConvo.id}` },
         (payload) => {
-          const newMsg = payload.new as Message;
-          setRealtimeMessages((prev) => {
-            if (prev.some((m) => m.id === newMsg.id)) return prev;
-            return [...prev, newMsg];
-          });
+          if (payload.eventType === "INSERT") {
+            const newMsg = payload.new as Message;
+            setRealtimeMessages((prev) => {
+              if (prev.some((m) => m.id === newMsg.id)) return prev;
+              return [...prev, newMsg];
+            });
+          } else if (payload.eventType === "UPDATE") {
+            const updated = payload.new as Message;
+            setRealtimeMessages((prev) =>
+              prev.map((m) => (m.id === updated.id ? updated : m))
+            );
+          }
         }
       )
       .subscribe();
     return () => { supabase.removeChannel(channel); };
   }, [activeConvo?.id]);
+
+  // Mark unread messages as read
+  useEffect(() => {
+    if (!activeConvo || !user || realtimeMessages.length === 0) return;
+    const unreadIds = realtimeMessages
+      .filter((m) => m.sender_id !== user.id && !m.read_at)
+      .map((m) => m.id);
+    if (unreadIds.length === 0) return;
+    supabase
+      .from("messages")
+      .update({ read_at: new Date().toISOString() })
+      .in("id", unreadIds)
+      .then();
+  }, [realtimeMessages, activeConvo?.id, user?.id]);
 
   // Scroll to bottom
   useEffect(() => {
