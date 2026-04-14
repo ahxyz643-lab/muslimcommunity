@@ -261,9 +261,16 @@ const Messages = () => {
                   : "bg-card text-foreground border border-border rounded-bl-md"
               }`}>
                 <p>{msg.content}</p>
-                <p className={`mt-1 text-[10px] ${msg.sender_id === user?.id ? "text-primary-foreground/60" : "text-muted-foreground"}`}>
-                  {formatDistanceToNow(new Date(msg.created_at), { addSuffix: false })}
-                </p>
+                <div className={`mt-1 flex items-center gap-1 ${msg.sender_id === user?.id ? "justify-end" : ""}`}>
+                  <span className={`text-[10px] ${msg.sender_id === user?.id ? "text-primary-foreground/60" : "text-muted-foreground"}`}>
+                    {formatDistanceToNow(new Date(msg.created_at), { addSuffix: false })}
+                  </span>
+                  {msg.sender_id === user?.id && (
+                    msg.read_at
+                      ? <CheckCheck className="h-3.5 w-3.5 text-blue-400" />
+                      : <Check className="h-3.5 w-3.5 text-primary-foreground/50" />
+                  )}
+                </div>
               </div>
             </div>
           ))}
