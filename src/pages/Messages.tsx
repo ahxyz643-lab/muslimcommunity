@@ -113,8 +113,13 @@ const Messages = () => {
 
   // Sync fetched messages into realtime state
   useEffect(() => {
-    setRealtimeMessages(fetchedMessages);
-  }, [fetchedMessages]);
+    if (fetchedMessages.length > 0 || realtimeMessages.length > 0) {
+      setRealtimeMessages((prev) => {
+        if (JSON.stringify(prev) === JSON.stringify(fetchedMessages)) return prev;
+        return fetchedMessages;
+      });
+    }
+  }, [fetchedMessages.length, activeConvo?.id]);
 
   // Real-time messages subscription
   useEffect(() => {
