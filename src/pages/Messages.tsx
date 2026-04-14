@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { Search, Edit, ArrowLeft, Send, Loader2 } from "lucide-react";
+import { Search, Edit, ArrowLeft, Send, Loader2, Check, CheckCheck } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
