@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from "react";
-import { Search, Edit, ArrowLeft, Send, Loader2, Check, CheckCheck, ImagePlus, X } from "lucide-react";
+import { Search, Edit, ArrowLeft, Send, Loader2, Check, CheckCheck, ImagePlus, X, Mic, Square, Trash2 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
@@ -27,11 +27,12 @@ interface Message {
   created_at: string;
   read_at: string | null;
   image_url: string | null;
+  voice_url: string | null;
 }
 
 const isOnline = (lastSeen: string | null | undefined) => {
   if (!lastSeen) return false;
-  return Date.now() - new Date(lastSeen).getTime() < 2 * 60 * 1000; // 2 min
+  return Date.now() - new Date(lastSeen).getTime() < 2 * 60 * 1000;
 };
 
 const OnlineDot = ({ lastSeen, size = "sm" }: { lastSeen?: string | null; size?: "sm" | "md" }) => {
@@ -39,6 +40,52 @@ const OnlineDot = ({ lastSeen, size = "sm" }: { lastSeen?: string | null; size?:
   const px = size === "md" ? "h-3.5 w-3.5 border-2" : "h-2.5 w-2.5 border-[1.5px]";
   return (
     <span className={`absolute bottom-0 right-0 ${px} rounded-full border-background ${online ? "bg-green-500" : "bg-muted-foreground/40"}`} />
+  );
+};
+
+const VoicePlayer = ({ url }: { url: string }) => {
+  const audioRef = useRef<HTMLAudioElement>(null);
+  const [playing, setPlaying] = useState(false);
+  const [progress, setProgress] = useState(0);
+  const [duration, setDuration] = useState(0);
+
+  const toggle = () => {
+    if (!audioRef.current) return;
+    if (playing) {
+      audioRef.current.pause();
+    } else {
+      audioRef.current.play();
+    }
+    setPlaying(!playing);
+  };
+
+  return (
+    <div className="flex items-center gap-2 min-w-[180px]">
+      <audio
+        ref={audioRef}
+        src={url}
+        onTimeUpdate={() => {
+          if (audioRef.current) setProgress((audioRef.current.currentTime / (audioRef.current.duration || 1)) * 100);
+        }}
+        onLoadedMetadata={() => {
+          if (audioRef.current) setDuration(audioRef.current.duration);
+        }}
+        onEnded={() => { setPlaying(false); setProgress(0); }}
+      />
+      <button onClick={toggle} className="shrink-0">
+        {playing ? (
+          <Square className="h-4 w-4 fill-current" />
+        ) : (
+          <svg viewBox="0 0 24 24" className="h-4 w-4 fill-current"><polygon points="5,3 19,12 5,21" /></svg>
+        )}
+      </button>
+      <div className="flex-1 h-1.5 bg-current/20 rounded-full overflow-hidden">
+        <div className="h-full bg-current rounded-full transition-all" style={{ width: `${progress}%` }} />
+      </div>
+      <span className="text-[10px] opacity-70 tabular-nums">
+        {duration > 0 ? `${Math.floor(duration / 60)}:${String(Math.floor(duration % 60)).padStart(2, "0")}` : "0:00"}
+      </span>
+    </div>
   );
 };
 
@@ -53,8 +100,15 @@ const Messages = () => {
   const [realtimeMessages, setRealtimeMessages] = useState<Message[]>([]);
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
+  const [isRecording, setIsRecording] = useState(false);
+  const [recordingTime, setRecordingTime] = useState(0);
+  const [voiceBlob, setVoiceBlob] = useState<Blob | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const chunksRef = useRef<Blob[]>([]);
+  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // Update last_seen periodically
   useEffect(() => {
@@ -101,16 +155,21 @@ const Messages = () => {
 
         const { data: msgs } = await supabase
           .from("messages")
-          .select("content, created_at, image_url")
+          .select("content, created_at, image_url, voice_url")
           .eq("conversation_id", p.conversation_id)
           .order("created_at", { ascending: false })
           .limit(1);
 
+        const lastMsg = msgs?.[0];
+        let lastMessage = lastMsg?.content;
+        if (lastMsg?.image_url) lastMessage = "📷 Photo";
+        if (lastMsg?.voice_url) lastMessage = "🎤 Voice note";
+
         convos.push({
           id: p.conversation_id,
           otherUser: prof,
-          lastMessage: msgs?.[0]?.image_url ? "📷 Photo" : msgs?.[0]?.content,
-          lastMessageAt: msgs?.[0]?.created_at,
+          lastMessage,
+          lastMessageAt: lastMsg?.created_at,
           unread: 0,
         });
       }
@@ -164,6 +223,11 @@ const Messages = () => {
             setRealtimeMessages((prev) =>
               prev.map((m) => (m.id === updated.id ? updated : m))
             );
+          } else if (payload.eventType === "DELETE") {
+            const deletedId = payload.old?.id;
+            if (deletedId) {
+              setRealtimeMessages((prev) => prev.filter((m) => m.id !== deletedId));
+            }
           }
         }
       )
@@ -255,15 +319,62 @@ const Messages = () => {
     if (fileInputRef.current) fileInputRef.current.value = "";
   }, []);
 
+  // Voice recording
+  const startRecording = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const mediaRecorder = new MediaRecorder(stream);
+      mediaRecorderRef.current = mediaRecorder;
+      chunksRef.current = [];
+
+      mediaRecorder.ondataavailable = (e) => {
+        if (e.data.size > 0) chunksRef.current.push(e.data);
+      };
+
+      mediaRecorder.onstop = () => {
+        const blob = new Blob(chunksRef.current, { type: "audio/webm" });
+        setVoiceBlob(blob);
+        stream.getTracks().forEach((t) => t.stop());
+      };
+
+      mediaRecorder.start();
+      setIsRecording(true);
+      setRecordingTime(0);
+      timerRef.current = setInterval(() => setRecordingTime((t) => t + 1), 1000);
+    } catch (err) {
+      console.error("Mic access denied:", err);
+    }
+  };
+
+  const stopRecording = () => {
+    mediaRecorderRef.current?.stop();
+    setIsRecording(false);
+    if (timerRef.current) { clearInterval(timerRef.current); timerRef.current = null; }
+  };
+
+  const clearVoice = () => {
+    setVoiceBlob(null);
+    setRecordingTime(0);
+  };
+
+  const deleteMessage = async (msgId: string) => {
+    setDeletingId(msgId);
+    await supabase.from("messages").delete().eq("id", msgId);
+    setRealtimeMessages((prev) => prev.filter((m) => m.id !== msgId));
+    setDeletingId(null);
+    queryClient.invalidateQueries({ queryKey: ["conversations"] });
+  };
+
   const sendMessage = async () => {
     if (!user || !activeConvo || sending) return;
-    if (!newMessage.trim() && !imageFile) return;
+    if (!newMessage.trim() && !imageFile && !voiceBlob) return;
 
     setSending(true);
     const content = newMessage.trim();
     setNewMessage("");
 
     let uploadedImageUrl: string | null = null;
+    let uploadedVoiceUrl: string | null = null;
 
     if (imageFile) {
       const ext = imageFile.name.split(".").pop() || "jpg";
@@ -279,11 +390,25 @@ const Messages = () => {
       clearImage();
     }
 
+    if (voiceBlob) {
+      const path = `chat/${activeConvo.id}/${crypto.randomUUID()}.webm`;
+      const { error: uploadErr } = await supabase.storage
+        .from("media")
+        .upload(path, voiceBlob, { contentType: "audio/webm" });
+
+      if (!uploadErr) {
+        const { data: urlData } = supabase.storage.from("media").getPublicUrl(path);
+        uploadedVoiceUrl = urlData.publicUrl;
+      }
+      clearVoice();
+    }
+
     await supabase.from("messages").insert({
       conversation_id: activeConvo.id,
       sender_id: user.id,
-      content: content || (uploadedImageUrl ? "" : ""),
+      content: content || "",
       image_url: uploadedImageUrl,
+      voice_url: uploadedVoiceUrl,
     });
 
     setSending(false);
@@ -296,7 +421,7 @@ const Messages = () => {
       <div className="flex min-h-screen flex-col pb-20">
         {/* Header */}
         <div className="flex items-center gap-3 border-b border-border px-4 py-3">
-          <button onClick={() => { setActiveConvo(null); setRealtimeMessages([]); clearImage(); }} className="text-muted-foreground hover:text-foreground">
+          <button onClick={() => { setActiveConvo(null); setRealtimeMessages([]); clearImage(); clearVoice(); }} className="text-muted-foreground hover:text-foreground">
             <ArrowLeft className="h-6 w-6" />
           </button>
           <div className="relative">
@@ -313,35 +438,49 @@ const Messages = () => {
 
         {/* Messages */}
         <div className="flex-1 overflow-y-auto px-4 py-4 space-y-3">
-          {realtimeMessages.map((msg) => (
-            <div key={msg.id} className={`flex ${msg.sender_id === user?.id ? "justify-end" : "justify-start"}`}>
-              <div className={`max-w-[75%] rounded-2xl px-4 py-2.5 text-sm ${
-                msg.sender_id === user?.id
-                  ? "bg-primary text-primary-foreground rounded-br-md"
-                  : "bg-card text-foreground border border-border rounded-bl-md"
-              }`}>
-                {msg.image_url && (
-                  <img
-                    src={msg.image_url}
-                    alt="Shared photo"
-                    className="mb-2 max-h-60 w-full rounded-xl object-cover cursor-pointer"
-                    onClick={() => window.open(msg.image_url!, "_blank")}
-                  />
+          {realtimeMessages.map((msg) => {
+            const isMine = msg.sender_id === user?.id;
+            return (
+              <div key={msg.id} className={`group flex ${isMine ? "justify-end" : "justify-start"}`}>
+                {/* Delete button for own messages */}
+                {isMine && (
+                  <button
+                    onClick={() => deleteMessage(msg.id)}
+                    disabled={deletingId === msg.id}
+                    className="mr-1 self-center opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-destructive"
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </button>
                 )}
-                {msg.content && <p>{msg.content}</p>}
-                <div className={`mt-1 flex items-center gap-1 ${msg.sender_id === user?.id ? "justify-end" : ""}`}>
-                  <span className={`text-[10px] ${msg.sender_id === user?.id ? "text-primary-foreground/60" : "text-muted-foreground"}`}>
-                    {formatDistanceToNow(new Date(msg.created_at), { addSuffix: false })}
-                  </span>
-                  {msg.sender_id === user?.id && (
-                    msg.read_at
-                      ? <CheckCheck className="h-3.5 w-3.5 text-blue-400" />
-                      : <Check className="h-3.5 w-3.5 text-primary-foreground/50" />
+                <div className={`max-w-[75%] rounded-2xl px-4 py-2.5 text-sm ${
+                  isMine
+                    ? "bg-primary text-primary-foreground rounded-br-md"
+                    : "bg-card text-foreground border border-border rounded-bl-md"
+                }`}>
+                  {msg.image_url && (
+                    <img
+                      src={msg.image_url}
+                      alt="Shared photo"
+                      className="mb-2 max-h-60 w-full rounded-xl object-cover cursor-pointer"
+                      onClick={() => window.open(msg.image_url!, "_blank")}
+                    />
                   )}
+                  {msg.voice_url && <VoicePlayer url={msg.voice_url} />}
+                  {msg.content && <p>{msg.content}</p>}
+                  <div className={`mt-1 flex items-center gap-1 ${isMine ? "justify-end" : ""}`}>
+                    <span className={`text-[10px] ${isMine ? "text-primary-foreground/60" : "text-muted-foreground"}`}>
+                      {formatDistanceToNow(new Date(msg.created_at), { addSuffix: false })}
+                    </span>
+                    {isMine && (
+                      msg.read_at
+                        ? <CheckCheck className="h-3.5 w-3.5 text-blue-400" />
+                        : <Check className="h-3.5 w-3.5 text-primary-foreground/50" />
+                    )}
+                  </div>
                 </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
           <div ref={messagesEndRef} />
         </div>
 
@@ -357,6 +496,19 @@ const Messages = () => {
           </div>
         )}
 
+        {/* Voice preview */}
+        {voiceBlob && !isRecording && (
+          <div className="border-t border-border px-4 py-2">
+            <div className="flex items-center gap-2 rounded-xl bg-secondary px-3 py-2">
+              <Mic className="h-4 w-4 text-primary" />
+              <span className="text-sm text-foreground">Voice note ready</span>
+              <button onClick={clearVoice} className="ml-auto text-muted-foreground hover:text-destructive">
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+          </div>
+        )}
+
         {/* Input */}
         <div className="border-t border-border px-4 py-3">
           <div className="flex items-center gap-2">
@@ -364,20 +516,47 @@ const Messages = () => {
             <button onClick={() => fileInputRef.current?.click()} className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-muted-foreground hover:bg-secondary hover:text-foreground">
               <ImagePlus className="h-5 w-5" />
             </button>
-            <input
-              value={newMessage}
-              onChange={(e) => setNewMessage(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && !e.shiftKey && sendMessage()}
-              placeholder="Type a message..."
-              className="flex-1 rounded-full bg-secondary px-4 py-2.5 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none"
-            />
-            <button
-              onClick={sendMessage}
-              disabled={(!newMessage.trim() && !imageFile) || sending}
-              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground disabled:opacity-40 shadow-glow"
-            >
-              {sending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-5 w-5" />}
-            </button>
+
+            {isRecording ? (
+              <div className="flex flex-1 items-center gap-2 rounded-full bg-destructive/10 px-4 py-2.5">
+                <span className="h-2 w-2 rounded-full bg-destructive animate-pulse" />
+                <span className="text-sm text-destructive font-medium tabular-nums">
+                  {Math.floor(recordingTime / 60)}:{String(recordingTime % 60).padStart(2, "0")}
+                </span>
+                <span className="text-sm text-muted-foreground">Recording...</span>
+              </div>
+            ) : (
+              <input
+                value={newMessage}
+                onChange={(e) => setNewMessage(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && !e.shiftKey && sendMessage()}
+                placeholder="Type a message..."
+                className="flex-1 rounded-full bg-secondary px-4 py-2.5 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none"
+              />
+            )}
+
+            {/* Mic / Stop button */}
+            {!newMessage.trim() && !imageFile && !voiceBlob ? (
+              <button
+                onClick={isRecording ? stopRecording : startRecording}
+                className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full ${
+                  isRecording ? "bg-destructive text-destructive-foreground" : "text-muted-foreground hover:bg-secondary hover:text-foreground"
+                }`}
+              >
+                {isRecording ? <Square className="h-4 w-4" /> : <Mic className="h-5 w-5" />}
+              </button>
+            ) : null}
+
+            {/* Send button */}
+            {(newMessage.trim() || imageFile || voiceBlob) && (
+              <button
+                onClick={sendMessage}
+                disabled={sending}
+                className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground disabled:opacity-40 shadow-glow"
+              >
+                {sending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-5 w-5" />}
+              </button>
+            )}
           </div>
         </div>
       </div>
