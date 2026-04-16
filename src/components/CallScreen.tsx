@@ -45,6 +45,7 @@ const CallScreen = ({
   const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const endedRef = useRef(false);
+  const iceCandidateQueue = useRef<RTCIceCandidateInit[]>([]);
 
   const channelName = `call-${conversationId}`;
 
@@ -143,6 +144,11 @@ const CallScreen = ({
 
           if (payload.type === "offer" && payload.from !== currentUserId) {
             await pcRef.current.setRemoteDescription(new RTCSessionDescription(payload.sdp));
+            // Flush queued ICE candidates
+            for (const c of iceCandidateQueue.current) {
+              await pcRef.current.addIceCandidate(new RTCIceCandidate(c));
+            }
+            iceCandidateQueue.current = [];
             const answer = await pcRef.current.createAnswer();
             await pcRef.current.setLocalDescription(answer);
             channel.send({
@@ -154,10 +160,19 @@ const CallScreen = ({
 
           if (payload.type === "answer" && payload.from !== currentUserId) {
             await pcRef.current.setRemoteDescription(new RTCSessionDescription(payload.sdp));
+            // Flush queued ICE candidates
+            for (const c of iceCandidateQueue.current) {
+              await pcRef.current.addIceCandidate(new RTCIceCandidate(c));
+            }
+            iceCandidateQueue.current = [];
           }
 
           if (payload.type === "ice-candidate" && payload.from !== currentUserId) {
-            await pcRef.current.addIceCandidate(new RTCIceCandidate(payload.candidate));
+            if (pcRef.current.remoteDescription) {
+              await pcRef.current.addIceCandidate(new RTCIceCandidate(payload.candidate));
+            } else {
+              iceCandidateQueue.current.push(payload.candidate);
+            }
           }
 
           if (payload.type === "accept" && payload.from !== currentUserId) {

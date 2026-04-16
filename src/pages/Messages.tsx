@@ -195,7 +195,7 @@ const Messages = () => {
 
     conversations.forEach((convo) => {
       const ch = supabase
-        .channel(`call-listen-${convo.id}`, { config: { broadcast: { self: false } } })
+        .channel(`call-${convo.id}`, { config: { broadcast: { self: false } } })
         .on("broadcast", { event: "call-signal" }, ({ payload }) => {
           if (payload.type === "ring" && payload.from !== user.id && !activeCall && !incomingCall) {
             setIncomingCall({
