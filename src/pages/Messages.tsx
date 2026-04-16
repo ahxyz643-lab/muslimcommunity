@@ -459,11 +459,12 @@ const Messages = () => {
 
   const declineIncomingCall = () => {
     if (!incomingCall) return;
-    // Send end signal
     const ch = supabase.channel(`call-${incomingCall.conversationId}`, { config: { broadcast: { self: false } } });
-    ch.subscribe().then(() => {
-      ch.send({ type: "broadcast", event: "call-signal", payload: { type: "end", from: user?.id } });
-      setTimeout(() => supabase.removeChannel(ch), 500);
+    ch.subscribe((status) => {
+      if (status === "SUBSCRIBED") {
+        ch.send({ type: "broadcast", event: "call-signal", payload: { type: "end", from: user?.id } });
+        setTimeout(() => supabase.removeChannel(ch), 500);
+      }
     });
     setIncomingCall(null);
   };
