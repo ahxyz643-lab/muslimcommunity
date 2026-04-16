@@ -111,6 +111,10 @@ const Messages = () => {
   const chunksRef = useRef<Blob[]>([]);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
+  // Calling state
+  const [activeCall, setActiveCall] = useState<{ isVideo: boolean; isIncoming: boolean } | null>(null);
+  const [incomingCall, setIncomingCall] = useState<{ conversationId: string; callerId: string; isVideo: boolean } | null>(null);
+
   // Update last_seen periodically
   useEffect(() => {
     if (!user) return;
