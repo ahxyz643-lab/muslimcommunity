@@ -718,6 +718,7 @@ const Messages = () => {
   // Conversations list
   return (
     <div className="pb-20">
+      {incomingCallOverlay}
       <div className="flex items-center justify-between border-b border-border px-4 py-3">
         <h1 className="font-display text-xl font-bold text-foreground">Messages</h1>
         <button onClick={() => setShowNewChat(true)} className="rounded-full p-2 text-muted-foreground hover:bg-secondary hover:text-foreground">
