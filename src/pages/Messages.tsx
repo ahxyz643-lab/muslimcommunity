@@ -676,6 +676,7 @@ const Messages = () => {
   if (showNewChat) {
     return (
       <div className="pb-20">
+        {incomingCallOverlay}
         <div className="flex items-center gap-3 border-b border-border px-4 py-3">
           <button onClick={() => { setShowNewChat(false); setSearchQuery(""); }} className="text-muted-foreground hover:text-foreground">
             <ArrowLeft className="h-6 w-6" />
