@@ -45,6 +45,7 @@ const CallScreen = ({
   const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const endedRef = useRef(false);
+  const iceCandidateQueue = useRef<RTCIceCandidateInit[]>([]);
 
   const channelName = `call-${conversationId}`;
 
