@@ -188,7 +188,33 @@ const Messages = () => {
     enabled: !!user,
   });
 
-  // Fetch messages for active conversation
+  // Listen for incoming calls across all conversations
+  useEffect(() => {
+    if (!user || conversations.length === 0) return;
+    const channels: ReturnType<typeof supabase.channel>[] = [];
+
+    conversations.forEach((convo) => {
+      const ch = supabase
+        .channel(`call-listen-${convo.id}`, { config: { broadcast: { self: false } } })
+        .on("broadcast", { event: "call-signal" }, ({ payload }) => {
+          if (payload.type === "ring" && payload.from !== user.id && !activeCall && !incomingCall) {
+            setIncomingCall({
+              conversationId: convo.id,
+              callerId: payload.from,
+              isVideo: payload.isVideo,
+            });
+          }
+        })
+        .subscribe();
+      channels.push(ch);
+    });
+
+    return () => {
+      channels.forEach((ch) => supabase.removeChannel(ch));
+    };
+  }, [user?.id, conversations, activeCall, incomingCall]);
+
+
   const { data: fetchedMessages = [] } = useQuery({
     queryKey: ["messages", activeConvo?.id],
     queryFn: async () => {
