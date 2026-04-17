@@ -740,12 +740,40 @@ const Messages = () => {
       {incomingCallOverlay}
       <div className="flex items-center justify-between border-b border-border px-4 py-3">
         <h1 className="font-display text-xl font-bold text-foreground">Messages</h1>
-        <button onClick={() => setShowNewChat(true)} className="rounded-full p-2 text-muted-foreground hover:bg-secondary hover:text-foreground">
-          <Edit className="h-5 w-5" />
+        {activeTab === "chats" && (
+          <button onClick={() => setShowNewChat(true)} className="rounded-full p-2 text-muted-foreground hover:bg-secondary hover:text-foreground">
+            <Edit className="h-5 w-5" />
+          </button>
+        )}
+      </div>
+
+      {/* Tabs */}
+      <div className="flex border-b border-border">
+        <button
+          onClick={() => setActiveTab("chats")}
+          className={`flex-1 py-3 text-sm font-semibold transition-colors ${
+            activeTab === "chats"
+              ? "border-b-2 border-primary text-foreground"
+              : "text-muted-foreground hover:text-foreground"
+          }`}
+        >
+          Chats
+        </button>
+        <button
+          onClick={() => setActiveTab("calls")}
+          className={`flex-1 py-3 text-sm font-semibold transition-colors ${
+            activeTab === "calls"
+              ? "border-b-2 border-primary text-foreground"
+              : "text-muted-foreground hover:text-foreground"
+          }`}
+        >
+          Calls
         </button>
       </div>
 
-      {convosLoading ? (
+      {activeTab === "calls" ? (
+        <CallHistory onCallBack={handleCallBack} />
+      ) : convosLoading ? (
         <div className="flex justify-center py-20"><Loader2 className="h-6 w-6 animate-spin text-primary" /></div>
       ) : conversations.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-20 px-4 text-center">
