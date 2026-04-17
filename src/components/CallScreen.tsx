@@ -18,11 +18,34 @@ interface CallScreenProps {
 
 type CallState = "ringing" | "connecting" | "connected" | "ended";
 
+// ICE servers: STUN for direct connections + TURN as relay fallback for restrictive networks (mobile carriers, corporate firewalls, symmetric NATs)
+// Using Open Relay Project's free public TURN servers (https://www.metered.ca/tools/openrelay/)
 const ICE_SERVERS: RTCConfiguration = {
   iceServers: [
     { urls: "stun:stun.l.google.com:19302" },
     { urls: "stun:stun1.l.google.com:19302" },
+    {
+      urls: "turn:openrelay.metered.ca:80",
+      username: "openrelayproject",
+      credential: "openrelayproject",
+    },
+    {
+      urls: "turn:openrelay.metered.ca:443",
+      username: "openrelayproject",
+      credential: "openrelayproject",
+    },
+    {
+      urls: "turn:openrelay.metered.ca:443?transport=tcp",
+      username: "openrelayproject",
+      credential: "openrelayproject",
+    },
+    {
+      urls: "turns:openrelay.metered.ca:443?transport=tcp",
+      username: "openrelayproject",
+      credential: "openrelayproject",
+    },
   ],
+  iceCandidatePoolSize: 10,
 };
 
 const CallScreen = ({
