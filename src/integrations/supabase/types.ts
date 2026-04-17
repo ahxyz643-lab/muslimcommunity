@@ -14,6 +14,42 @@ export type Database = {
   }
   public: {
     Tables: {
+      call_logs: {
+        Row: {
+          call_type: string
+          caller_id: string
+          conversation_id: string
+          duration_seconds: number
+          ended_at: string | null
+          id: string
+          receiver_id: string
+          started_at: string
+          status: string
+        }
+        Insert: {
+          call_type: string
+          caller_id: string
+          conversation_id: string
+          duration_seconds?: number
+          ended_at?: string | null
+          id?: string
+          receiver_id: string
+          started_at?: string
+          status: string
+        }
+        Update: {
+          call_type?: string
+          caller_id?: string
+          conversation_id?: string
+          duration_seconds?: number
+          ended_at?: string | null
+          id?: string
+          receiver_id?: string
+          started_at?: string
+          status?: string
+        }
+        Relationships: []
+      }
       comments: {
         Row: {
           content: string

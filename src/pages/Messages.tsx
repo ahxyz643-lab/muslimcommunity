@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { Search, Edit, ArrowLeft, Send, Loader2, Check, CheckCheck, ImagePlus, X, Mic, Square, Trash2, Phone, PhoneOff, Video } from "lucide-react";
 import CallScreen from "@/components/CallScreen";
+import CallHistory from "@/components/CallHistory";
 import { useAuth } from "@/contexts/AuthContext";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
@@ -114,6 +115,24 @@ const Messages = () => {
   // Calling state
   const [activeCall, setActiveCall] = useState<{ isVideo: boolean; isIncoming: boolean } | null>(null);
   const [incomingCall, setIncomingCall] = useState<{ conversationId: string; callerId: string; isVideo: boolean } | null>(null);
+  const [activeTab, setActiveTab] = useState<"chats" | "calls">("chats");
+
+  // Call back handler from CallHistory
+  const handleCallBack = useCallback(async (conversationId: string, otherUserId: string, isVideo: boolean) => {
+    let convo = conversations.find((c) => c.id === conversationId);
+    if (!convo) {
+      // Conversation not in current list — fetch profile and build
+      const { data: prof } = await supabase
+        .from("profiles")
+        .select("user_id, display_name, username, avatar_url, last_seen")
+        .eq("user_id", otherUserId)
+        .maybeSingle();
+      if (!prof) return;
+      convo = { id: conversationId, otherUser: prof, unread: 0 };
+    }
+    setActiveConvo(convo);
+    setActiveCall({ isVideo, isIncoming: false });
+  }, [conversations]);
 
   // Update last_seen periodically
   useEffect(() => {
@@ -721,12 +740,40 @@ const Messages = () => {
       {incomingCallOverlay}
       <div className="flex items-center justify-between border-b border-border px-4 py-3">
         <h1 className="font-display text-xl font-bold text-foreground">Messages</h1>
-        <button onClick={() => setShowNewChat(true)} className="rounded-full p-2 text-muted-foreground hover:bg-secondary hover:text-foreground">
-          <Edit className="h-5 w-5" />
+        {activeTab === "chats" && (
+          <button onClick={() => setShowNewChat(true)} className="rounded-full p-2 text-muted-foreground hover:bg-secondary hover:text-foreground">
+            <Edit className="h-5 w-5" />
+          </button>
+        )}
+      </div>
+
+      {/* Tabs */}
+      <div className="flex border-b border-border">
+        <button
+          onClick={() => setActiveTab("chats")}
+          className={`flex-1 py-3 text-sm font-semibold transition-colors ${
+            activeTab === "chats"
+              ? "border-b-2 border-primary text-foreground"
+              : "text-muted-foreground hover:text-foreground"
+          }`}
+        >
+          Chats
+        </button>
+        <button
+          onClick={() => setActiveTab("calls")}
+          className={`flex-1 py-3 text-sm font-semibold transition-colors ${
+            activeTab === "calls"
+              ? "border-b-2 border-primary text-foreground"
+              : "text-muted-foreground hover:text-foreground"
+          }`}
+        >
+          Calls
         </button>
       </div>
 
-      {convosLoading ? (
+      {activeTab === "calls" ? (
+        <CallHistory onCallBack={handleCallBack} />
+      ) : convosLoading ? (
         <div className="flex justify-center py-20"><Loader2 className="h-6 w-6 animate-spin text-primary" /></div>
       ) : conversations.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-20 px-4 text-center">
