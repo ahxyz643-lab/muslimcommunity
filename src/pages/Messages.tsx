@@ -548,13 +548,19 @@ const Messages = () => {
           </div>
           {/* Call buttons */}
           <button
-            onClick={() => setActiveCall({ isVideo: false, isIncoming: false })}
+            onClick={() => {
+              ringUser(activeConvo.otherUser.user_id, activeConvo.id, false, activeConvo.otherUser.display_name || "User", activeConvo.otherUser.avatar_url);
+              setActiveCall({ isVideo: false, isIncoming: false });
+            }}
             className="rounded-full p-2 text-muted-foreground hover:bg-secondary hover:text-foreground"
           >
             <Phone className="h-5 w-5" />
           </button>
           <button
-            onClick={() => setActiveCall({ isVideo: true, isIncoming: false })}
+            onClick={() => {
+              ringUser(activeConvo.otherUser.user_id, activeConvo.id, true, activeConvo.otherUser.display_name || "User", activeConvo.otherUser.avatar_url);
+              setActiveCall({ isVideo: true, isIncoming: false });
+            }}
             className="rounded-full p-2 text-muted-foreground hover:bg-secondary hover:text-foreground"
           >
             <Video className="h-5 w-5" />
