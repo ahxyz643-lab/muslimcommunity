@@ -46,8 +46,40 @@ const CallScreen = ({
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const endedRef = useRef(false);
   const iceCandidateQueue = useRef<RTCIceCandidateInit[]>([]);
+  const startedAtRef = useRef<Date>(new Date());
+  const wasConnectedRef = useRef(false);
+  const callDurationRef = useRef(0);
 
   const channelName = `call-${conversationId}`;
+
+  // Track latest duration in ref for cleanup
+  useEffect(() => {
+    callDurationRef.current = callDuration;
+  }, [callDuration]);
+
+  // Track if call was ever connected
+  useEffect(() => {
+    if (callState === "connected") wasConnectedRef.current = true;
+  }, [callState]);
+
+  const logCall = useCallback(async (status: "completed" | "missed" | "declined" | "cancelled") => {
+    try {
+      // Only the caller logs the call to avoid duplicates
+      if (isIncoming) return;
+      await supabase.from("call_logs").insert({
+        conversation_id: conversationId,
+        caller_id: currentUserId,
+        receiver_id: otherUser.user_id,
+        call_type: isVideoCall ? "video" : "voice",
+        status,
+        duration_seconds: callDurationRef.current,
+        started_at: startedAtRef.current.toISOString(),
+        ended_at: new Date().toISOString(),
+      });
+    } catch (err) {
+      console.error("Failed to log call:", err);
+    }
+  }, [conversationId, currentUserId, otherUser.user_id, isVideoCall, isIncoming]);
 
   const cleanup = useCallback(() => {
     if (endedRef.current) return;
@@ -56,6 +88,12 @@ const CallScreen = ({
     localStreamRef.current?.getTracks().forEach((t) => t.stop());
     pcRef.current?.close();
     pcRef.current = null;
+
+    // Determine final status
+    const status: "completed" | "missed" | "cancelled" =
+      wasConnectedRef.current ? "completed" : "cancelled";
+    logCall(status);
+
     if (channelRef.current) {
       channelRef.current.send({
         type: "broadcast",
@@ -68,7 +106,7 @@ const CallScreen = ({
     }
     setCallState("ended");
     setTimeout(onEnd, 1000);
-  }, [currentUserId, onEnd]);
+  }, [currentUserId, onEnd, logCall]);
 
   // Start call duration timer
   useEffect(() => {
