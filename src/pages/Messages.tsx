@@ -1,9 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { Search, Edit, ArrowLeft, Send, Loader2, Check, CheckCheck, ImagePlus, X, Mic, Square, Trash2, Phone, PhoneOff, Video } from "lucide-react";
 import CallScreen from "@/components/CallScreen";
-import CallHistory from "@/components/CallHistory";
 import { useAuth } from "@/contexts/AuthContext";
-import { useIncomingCall } from "@/contexts/IncomingCallContext";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { formatDistanceToNow } from "date-fns";
@@ -94,7 +92,6 @@ const VoicePlayer = ({ url }: { url: string }) => {
 
 const Messages = () => {
   const { user } = useAuth();
-  const { consumePendingCall, ringUser } = useIncomingCall();
   const queryClient = useQueryClient();
   const [activeConvo, setActiveConvo] = useState<Conversation | null>(null);
   const [newMessage, setNewMessage] = useState("");
@@ -117,8 +114,6 @@ const Messages = () => {
   // Calling state
   const [activeCall, setActiveCall] = useState<{ isVideo: boolean; isIncoming: boolean } | null>(null);
   const [incomingCall, setIncomingCall] = useState<{ conversationId: string; callerId: string; isVideo: boolean } | null>(null);
-  const [activeTab, setActiveTab] = useState<"chats" | "calls">("chats");
-
 
   // Update last_seen periodically
   useEffect(() => {
@@ -193,43 +188,31 @@ const Messages = () => {
     enabled: !!user,
   });
 
-  // Call back handler from CallHistory (declared after `conversations` is initialized)
-  const handleCallBack = useCallback(async (conversationId: string, otherUserId: string, isVideo: boolean) => {
-    let convo = conversations.find((c) => c.id === conversationId);
-    if (!convo) {
-      const { data: prof } = await supabase
-        .from("profiles")
-        .select("user_id, display_name, username, avatar_url, last_seen")
-        .eq("user_id", otherUserId)
-        .maybeSingle();
-      if (!prof) return;
-      convo = { id: conversationId, otherUser: prof, unread: 0 };
-    }
-    setActiveConvo(convo);
-    ringUser(convo.otherUser.user_id, convo.id, isVideo, convo.otherUser.display_name || "User", convo.otherUser.avatar_url);
-    setActiveCall({ isVideo, isIncoming: false });
-  }, [conversations, ringUser]);
-
-  // Consume a globally-accepted incoming call (user accepted from anywhere in app)
+  // Listen for incoming calls across all conversations
   useEffect(() => {
-    const pending = consumePendingCall();
-    if (!pending) return;
-    (async () => {
-      let convo = conversations.find((c) => c.id === pending.conversationId);
-      if (!convo) {
-        const { data: prof } = await supabase
-          .from("profiles")
-          .select("user_id, display_name, username, avatar_url, last_seen")
-          .eq("user_id", pending.otherUserId)
-          .maybeSingle();
-        if (!prof) return;
-        convo = { id: pending.conversationId, otherUser: prof, unread: 0 };
-      }
-      setActiveConvo(convo);
-      setActiveCall({ isVideo: pending.isVideo, isIncoming: pending.isIncoming });
-    })();
-  }, [consumePendingCall, conversations]);
+    if (!user || conversations.length === 0) return;
+    const channels: ReturnType<typeof supabase.channel>[] = [];
 
+    conversations.forEach((convo) => {
+      const ch = supabase
+        .channel(`call-${convo.id}`, { config: { broadcast: { self: false } } })
+        .on("broadcast", { event: "call-signal" }, ({ payload }) => {
+          if (payload.type === "ring" && payload.from !== user.id && !activeCall && !incomingCall) {
+            setIncomingCall({
+              conversationId: convo.id,
+              callerId: payload.from,
+              isVideo: payload.isVideo,
+            });
+          }
+        })
+        .subscribe();
+      channels.push(ch);
+    });
+
+    return () => {
+      channels.forEach((ch) => supabase.removeChannel(ch));
+    };
+  }, [user?.id, conversations, activeCall, incomingCall]);
 
 
   const { data: fetchedMessages = [] } = useQuery({
@@ -549,19 +532,13 @@ const Messages = () => {
           </div>
           {/* Call buttons */}
           <button
-            onClick={() => {
-              ringUser(activeConvo.otherUser.user_id, activeConvo.id, false, activeConvo.otherUser.display_name || "User", activeConvo.otherUser.avatar_url);
-              setActiveCall({ isVideo: false, isIncoming: false });
-            }}
+            onClick={() => setActiveCall({ isVideo: false, isIncoming: false })}
             className="rounded-full p-2 text-muted-foreground hover:bg-secondary hover:text-foreground"
           >
             <Phone className="h-5 w-5" />
           </button>
           <button
-            onClick={() => {
-              ringUser(activeConvo.otherUser.user_id, activeConvo.id, true, activeConvo.otherUser.display_name || "User", activeConvo.otherUser.avatar_url);
-              setActiveCall({ isVideo: true, isIncoming: false });
-            }}
+            onClick={() => setActiveCall({ isVideo: true, isIncoming: false })}
             className="rounded-full p-2 text-muted-foreground hover:bg-secondary hover:text-foreground"
           >
             <Video className="h-5 w-5" />
@@ -744,40 +721,12 @@ const Messages = () => {
       {incomingCallOverlay}
       <div className="flex items-center justify-between border-b border-border px-4 py-3">
         <h1 className="font-display text-xl font-bold text-foreground">Messages</h1>
-        {activeTab === "chats" && (
-          <button onClick={() => setShowNewChat(true)} className="rounded-full p-2 text-muted-foreground hover:bg-secondary hover:text-foreground">
-            <Edit className="h-5 w-5" />
-          </button>
-        )}
-      </div>
-
-      {/* Tabs */}
-      <div className="flex border-b border-border">
-        <button
-          onClick={() => setActiveTab("chats")}
-          className={`flex-1 py-3 text-sm font-semibold transition-colors ${
-            activeTab === "chats"
-              ? "border-b-2 border-primary text-foreground"
-              : "text-muted-foreground hover:text-foreground"
-          }`}
-        >
-          Chats
-        </button>
-        <button
-          onClick={() => setActiveTab("calls")}
-          className={`flex-1 py-3 text-sm font-semibold transition-colors ${
-            activeTab === "calls"
-              ? "border-b-2 border-primary text-foreground"
-              : "text-muted-foreground hover:text-foreground"
-          }`}
-        >
-          Calls
+        <button onClick={() => setShowNewChat(true)} className="rounded-full p-2 text-muted-foreground hover:bg-secondary hover:text-foreground">
+          <Edit className="h-5 w-5" />
         </button>
       </div>
 
-      {activeTab === "calls" ? (
-        <CallHistory onCallBack={handleCallBack} />
-      ) : convosLoading ? (
+      {convosLoading ? (
         <div className="flex justify-center py-20"><Loader2 className="h-6 w-6 animate-spin text-primary" /></div>
       ) : conversations.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-20 px-4 text-center">
