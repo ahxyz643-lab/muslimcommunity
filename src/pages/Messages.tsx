@@ -206,8 +206,9 @@ const Messages = () => {
       convo = { id: conversationId, otherUser: prof, unread: 0 };
     }
     setActiveConvo(convo);
+    ringUser(convo.otherUser.user_id, convo.id, isVideo, convo.otherUser.display_name || "User", convo.otherUser.avatar_url);
     setActiveCall({ isVideo, isIncoming: false });
-  }, [conversations]);
+  }, [conversations, ringUser]);
 
   // Consume a globally-accepted incoming call (user accepted from anywhere in app)
   useEffect(() => {
