@@ -115,6 +115,24 @@ const Messages = () => {
   // Calling state
   const [activeCall, setActiveCall] = useState<{ isVideo: boolean; isIncoming: boolean } | null>(null);
   const [incomingCall, setIncomingCall] = useState<{ conversationId: string; callerId: string; isVideo: boolean } | null>(null);
+  const [activeTab, setActiveTab] = useState<"chats" | "calls">("chats");
+
+  // Call back handler from CallHistory
+  const handleCallBack = useCallback(async (conversationId: string, otherUserId: string, isVideo: boolean) => {
+    let convo = conversations.find((c) => c.id === conversationId);
+    if (!convo) {
+      // Conversation not in current list — fetch profile and build
+      const { data: prof } = await supabase
+        .from("profiles")
+        .select("user_id, display_name, username, avatar_url, last_seen")
+        .eq("user_id", otherUserId)
+        .maybeSingle();
+      if (!prof) return;
+      convo = { id: conversationId, otherUser: prof, unread: 0 };
+    }
+    setActiveConvo(convo);
+    setActiveCall({ isVideo, isIncoming: false });
+  }, [conversations]);
 
   // Update last_seen periodically
   useEffect(() => {
