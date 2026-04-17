@@ -209,31 +209,26 @@ const Messages = () => {
     setActiveCall({ isVideo, isIncoming: false });
   }, [conversations]);
 
-  // Listen for incoming calls across all conversations
+  // Consume a globally-accepted incoming call (user accepted from anywhere in app)
   useEffect(() => {
-    if (!user || conversations.length === 0) return;
-    const channels: ReturnType<typeof supabase.channel>[] = [];
+    const pending = consumePendingCall();
+    if (!pending) return;
+    (async () => {
+      let convo = conversations.find((c) => c.id === pending.conversationId);
+      if (!convo) {
+        const { data: prof } = await supabase
+          .from("profiles")
+          .select("user_id, display_name, username, avatar_url, last_seen")
+          .eq("user_id", pending.otherUserId)
+          .maybeSingle();
+        if (!prof) return;
+        convo = { id: pending.conversationId, otherUser: prof, unread: 0 };
+      }
+      setActiveConvo(convo);
+      setActiveCall({ isVideo: pending.isVideo, isIncoming: pending.isIncoming });
+    })();
+  }, [consumePendingCall, conversations]);
 
-    conversations.forEach((convo) => {
-      const ch = supabase
-        .channel(`call-${convo.id}`, { config: { broadcast: { self: false } } })
-        .on("broadcast", { event: "call-signal" }, ({ payload }) => {
-          if (payload.type === "ring" && payload.from !== user.id && !activeCall && !incomingCall) {
-            setIncomingCall({
-              conversationId: convo.id,
-              callerId: payload.from,
-              isVideo: payload.isVideo,
-            });
-          }
-        })
-        .subscribe();
-      channels.push(ch);
-    });
-
-    return () => {
-      channels.forEach((ch) => supabase.removeChannel(ch));
-    };
-  }, [user?.id, conversations, activeCall, incomingCall]);
 
 
   const { data: fetchedMessages = [] } = useQuery({
