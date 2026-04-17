@@ -3,6 +3,7 @@ import { Search, Edit, ArrowLeft, Send, Loader2, Check, CheckCheck, ImagePlus, X
 import CallScreen from "@/components/CallScreen";
 import CallHistory from "@/components/CallHistory";
 import { useAuth } from "@/contexts/AuthContext";
+import { useIncomingCall } from "@/contexts/IncomingCallContext";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { formatDistanceToNow } from "date-fns";
@@ -93,6 +94,7 @@ const VoicePlayer = ({ url }: { url: string }) => {
 
 const Messages = () => {
   const { user } = useAuth();
+  const { consumePendingCall, ringUser } = useIncomingCall();
   const queryClient = useQueryClient();
   const [activeConvo, setActiveConvo] = useState<Conversation | null>(null);
   const [newMessage, setNewMessage] = useState("");
