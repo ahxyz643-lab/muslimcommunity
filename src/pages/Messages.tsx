@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { Search, Edit, ArrowLeft, Send, Loader2, Check, CheckCheck, ImagePlus, X, Mic, Square, Trash2, Phone, PhoneOff, Video } from "lucide-react";
 import CallScreen from "@/components/CallScreen";
+import CallHistory from "@/components/CallHistory";
 import { useAuth } from "@/contexts/AuthContext";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
