@@ -3,6 +3,7 @@ import { Search, Edit, ArrowLeft, Send, Loader2, Check, CheckCheck, ImagePlus, X
 import CallScreen from "@/components/CallScreen";
 import CallHistory from "@/components/CallHistory";
 import { useAuth } from "@/contexts/AuthContext";
+import { useIncomingCall } from "@/contexts/IncomingCallContext";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { formatDistanceToNow } from "date-fns";
@@ -93,6 +94,7 @@ const VoicePlayer = ({ url }: { url: string }) => {
 
 const Messages = () => {
   const { user } = useAuth();
+  const { consumePendingCall, ringUser } = useIncomingCall();
   const queryClient = useQueryClient();
   const [activeConvo, setActiveConvo] = useState<Conversation | null>(null);
   const [newMessage, setNewMessage] = useState("");
@@ -204,34 +206,30 @@ const Messages = () => {
       convo = { id: conversationId, otherUser: prof, unread: 0 };
     }
     setActiveConvo(convo);
+    ringUser(convo.otherUser.user_id, convo.id, isVideo, convo.otherUser.display_name || "User", convo.otherUser.avatar_url);
     setActiveCall({ isVideo, isIncoming: false });
-  }, [conversations]);
+  }, [conversations, ringUser]);
 
-  // Listen for incoming calls across all conversations
+  // Consume a globally-accepted incoming call (user accepted from anywhere in app)
   useEffect(() => {
-    if (!user || conversations.length === 0) return;
-    const channels: ReturnType<typeof supabase.channel>[] = [];
+    const pending = consumePendingCall();
+    if (!pending) return;
+    (async () => {
+      let convo = conversations.find((c) => c.id === pending.conversationId);
+      if (!convo) {
+        const { data: prof } = await supabase
+          .from("profiles")
+          .select("user_id, display_name, username, avatar_url, last_seen")
+          .eq("user_id", pending.otherUserId)
+          .maybeSingle();
+        if (!prof) return;
+        convo = { id: pending.conversationId, otherUser: prof, unread: 0 };
+      }
+      setActiveConvo(convo);
+      setActiveCall({ isVideo: pending.isVideo, isIncoming: pending.isIncoming });
+    })();
+  }, [consumePendingCall, conversations]);
 
-    conversations.forEach((convo) => {
-      const ch = supabase
-        .channel(`call-${convo.id}`, { config: { broadcast: { self: false } } })
-        .on("broadcast", { event: "call-signal" }, ({ payload }) => {
-          if (payload.type === "ring" && payload.from !== user.id && !activeCall && !incomingCall) {
-            setIncomingCall({
-              conversationId: convo.id,
-              callerId: payload.from,
-              isVideo: payload.isVideo,
-            });
-          }
-        })
-        .subscribe();
-      channels.push(ch);
-    });
-
-    return () => {
-      channels.forEach((ch) => supabase.removeChannel(ch));
-    };
-  }, [user?.id, conversations, activeCall, incomingCall]);
 
 
   const { data: fetchedMessages = [] } = useQuery({
@@ -551,13 +549,19 @@ const Messages = () => {
           </div>
           {/* Call buttons */}
           <button
-            onClick={() => setActiveCall({ isVideo: false, isIncoming: false })}
+            onClick={() => {
+              ringUser(activeConvo.otherUser.user_id, activeConvo.id, false, activeConvo.otherUser.display_name || "User", activeConvo.otherUser.avatar_url);
+              setActiveCall({ isVideo: false, isIncoming: false });
+            }}
             className="rounded-full p-2 text-muted-foreground hover:bg-secondary hover:text-foreground"
           >
             <Phone className="h-5 w-5" />
           </button>
           <button
-            onClick={() => setActiveCall({ isVideo: true, isIncoming: false })}
+            onClick={() => {
+              ringUser(activeConvo.otherUser.user_id, activeConvo.id, true, activeConvo.otherUser.display_name || "User", activeConvo.otherUser.avatar_url);
+              setActiveCall({ isVideo: true, isIncoming: false });
+            }}
             className="rounded-full p-2 text-muted-foreground hover:bg-secondary hover:text-foreground"
           >
             <Video className="h-5 w-5" />

@@ -6,6 +6,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider, useAuth } from "@/contexts/AuthContext";
 import { ThemeProvider } from "@/contexts/ThemeContext";
+import { IncomingCallProvider } from "@/contexts/IncomingCallContext";
 import SplashScreen from "@/components/SplashScreen";
 import BottomNav from "@/components/BottomNav";
 import Home from "@/pages/Home";
@@ -71,7 +72,9 @@ const App = () => {
           {showSplash && <SplashScreen onFinish={handleSplashFinish} />}
           <BrowserRouter>
             <AuthProvider>
-              <AppRoutes />
+              <IncomingCallProvider>
+                <AppRoutes />
+              </IncomingCallProvider>
             </AuthProvider>
           </BrowserRouter>
         </TooltipProvider>
