@@ -37,12 +37,13 @@ const FILTER_CSS: Record<string, string> = {
   noir: "grayscale(1) contrast(1.4) brightness(0.9)",
 };
 
-const ReelItem = ({ reel, isActive, onLike, onComment, onShare, muted, onToggleMute }: {
+const ReelItem = ({ reel, isActive, onLike, onComment, onShare, muted, onToggleMute, onView }: {
   reel: Reel; isActive: boolean; onLike: () => void; onComment: () => void; onShare: () => void;
-  muted: boolean; onToggleMute: () => void;
+  muted: boolean; onToggleMute: () => void; onView: () => void;
 }) => {
   const videoRef = useRef<HTMLVideoElement>(null);
   const [paused, setPaused] = useState(false);
+  const viewedRef = useRef(false);
 
   useEffect(() => {
     const v = videoRef.current;
@@ -51,9 +52,14 @@ const ReelItem = ({ reel, isActive, onLike, onComment, onShare, muted, onToggleM
       v.currentTime = 0;
       v.play().catch(() => {});
       setPaused(false);
+      if (!viewedRef.current) {
+        viewedRef.current = true;
+        onView();
+      }
     } else {
       v.pause();
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isActive]);
 
   const togglePlay = () => {
@@ -94,16 +100,16 @@ const ReelItem = ({ reel, isActive, onLike, onComment, onShare, muted, onToggleM
       {/* Gradient overlay */}
       <div className="pointer-events-none absolute inset-x-0 bottom-0 h-48 bg-gradient-to-t from-black/80 to-transparent" />
 
-      {/* Mute button */}
+      {/* Mute button - positioned lower so it doesn't overlap header */}
       <button
         onClick={onToggleMute}
-        className="absolute right-3 top-3 rounded-full bg-black/40 p-2 backdrop-blur-sm"
+        className="absolute right-3 top-16 rounded-full bg-black/50 p-2.5 backdrop-blur-sm"
       >
         {muted ? <VolumeX className="h-4 w-4 text-white" /> : <Volume2 className="h-4 w-4 text-white" />}
       </button>
 
       {/* Right action rail */}
-      <div className="absolute bottom-24 right-3 flex flex-col items-center gap-5">
+      <div className="absolute bottom-28 right-3 flex flex-col items-center gap-5">
         <button onClick={onLike} className="flex flex-col items-center gap-1">
           <Heart className={`h-8 w-8 drop-shadow-lg ${reel.liked ? "fill-destructive text-destructive" : "text-white"}`} />
           <span className="text-xs font-semibold text-white drop-shadow-lg">{reel.likes_count > 0 ? reel.likes_count : ""}</span>
@@ -209,6 +215,11 @@ const Reels = () => {
     } catch { toast({ title: "Could not copy", variant: "destructive" }); }
   };
 
+  const handleView = async (reel: Reel) => {
+    await supabase.from("reels").update({ views_count: reel.views_count + 1 }).eq("id", reel.id);
+    setReels((prev) => prev.map((r) => r.id === reel.id ? { ...r, views_count: r.views_count + 1 } : r));
+  };
+
   return (
     <div className="fixed inset-0 z-40 bg-black">
       {/* Header */}
@@ -256,6 +267,7 @@ const Reels = () => {
                 onShare={() => handleShare(reel)}
                 muted={muted}
                 onToggleMute={() => setMuted((m) => !m)}
+                onView={() => handleView(reel)}
               />
             </div>
           ))}

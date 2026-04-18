@@ -1,4 +1,4 @@
-import { Settings as SettingsIcon, Grid3X3, Bookmark, Heart, BarChart3, Loader2 } from "lucide-react";
+import { Settings as SettingsIcon, Grid3X3, Bookmark, Heart, BarChart3, Loader2, Clapperboard, Play, Eye } from "lucide-react";
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
@@ -73,8 +73,18 @@ const Profile = () => {
     enabled: !!user,
   });
 
+  const { data: userReels = [] } = useQuery({
+    queryKey: ["user-reels", user?.id],
+    queryFn: async () => {
+      const { data } = await supabase.from("reels").select("*").eq("user_id", user!.id).order("created_at", { ascending: false });
+      return data || [];
+    },
+    enabled: !!user,
+  });
+
   const tabs = [
     { id: "posts", icon: Grid3X3, label: "Posts" },
+    { id: "reels", icon: Clapperboard, label: "Reels" },
     { id: "saved", icon: Bookmark, label: "Saved" },
     { id: "liked", icon: Heart, label: "Liked" },
     { id: "studio", icon: BarChart3, label: "Studio" },
@@ -137,7 +147,44 @@ const Profile = () => {
       </div>
 
       <div>
-        {activeTab !== "studio" && (
+        {activeTab === "reels" ? (
+          userReels.length === 0 ? (
+            <div className="py-12 text-center">
+              <p className="text-sm text-muted-foreground">No reels yet</p>
+              <button onClick={() => navigate("/reels/create")} className="mt-3 rounded-full bg-primary px-5 py-2 text-xs font-semibold text-primary-foreground shadow-glow">
+                Create your first reel
+              </button>
+            </div>
+          ) : (
+            <div className="grid grid-cols-3 gap-0.5 p-0.5">
+              {userReels.map((reel: any) => (
+                <button
+                  key={reel.id}
+                  onClick={() => navigate("/reels")}
+                  className="group relative aspect-[9/16] overflow-hidden bg-secondary"
+                >
+                  <video
+                    src={reel.video_url}
+                    muted
+                    playsInline
+                    preload="metadata"
+                    className="h-full w-full object-cover"
+                  />
+                  <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent" />
+                  <div className="absolute right-1 top-1 rounded-full bg-black/50 p-1 backdrop-blur-sm">
+                    <Play className="h-3 w-3 fill-white text-white" />
+                  </div>
+                  <div className="absolute bottom-1 left-1.5 flex items-center gap-1">
+                    <Eye className="h-3 w-3 text-white drop-shadow-md" />
+                    <span className="text-[10px] font-semibold text-white drop-shadow-md">
+                      {reel.views_count >= 1000 ? (reel.views_count / 1000).toFixed(1) + "K" : reel.views_count}
+                    </span>
+                  </div>
+                </button>
+              ))}
+            </div>
+          )
+        ) : activeTab !== "studio" && (
           activePosts.length === 0 ? (
             <div className="py-12 text-center"><p className="text-sm text-muted-foreground">No {activeTab} posts</p></div>
           ) : (
