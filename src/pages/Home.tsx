@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import TopBar from "@/components/TopBar";
 import PostCard, { PostWithProfile } from "@/components/PostCard";
+import ReelsPreviewBar from "@/components/ReelsPreviewBar";
 import { supabase } from "@/integrations/supabase/client";
 import { fetchPostsWithProfiles } from "@/lib/posts";
 import { Loader2 } from "lucide-react";
@@ -31,6 +32,7 @@ const Home = () => {
   return (
     <div className="pb-20 pt-14">
       <TopBar />
+      <ReelsPreviewBar />
       {loading ? (
         <div className="flex items-center justify-center py-20"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>
       ) : posts.length === 0 ? (

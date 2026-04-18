@@ -21,6 +21,8 @@ import Auth from "@/pages/Auth";
 import Welcome from "@/pages/Welcome";
 import UserProfilePage from "@/pages/UserProfilePage";
 import Admin from "@/pages/Admin";
+import Reels from "@/pages/Reels";
+import CreateReel from "@/pages/CreateReel";
 import NotFound from "@/pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -51,6 +53,8 @@ const AppRoutes = () => {
         <Route path="/activity" element={<ProtectedRoute><Activity /></ProtectedRoute>} />
         <Route path="/creator-studio" element={<ProtectedRoute><CreatorStudio /></ProtectedRoute>} />
         <Route path="/admin" element={<ProtectedRoute><Admin /></ProtectedRoute>} />
+        <Route path="/reels" element={<ProtectedRoute><Reels /></ProtectedRoute>} />
+        <Route path="/reels/create" element={<ProtectedRoute><CreateReel /></ProtectedRoute>} />
         <Route path="*" element={<NotFound />} />
       </Routes>
       {user && <BottomNav />}
