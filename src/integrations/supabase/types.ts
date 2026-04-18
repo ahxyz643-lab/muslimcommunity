@@ -359,6 +359,118 @@ export type Database = {
         }
         Relationships: []
       }
+      reel_comments: {
+        Row: {
+          content: string
+          created_at: string
+          id: string
+          reel_id: string
+          user_id: string
+        }
+        Insert: {
+          content: string
+          created_at?: string
+          id?: string
+          reel_id: string
+          user_id: string
+        }
+        Update: {
+          content?: string
+          created_at?: string
+          id?: string
+          reel_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "reel_comments_reel_id_fkey"
+            columns: ["reel_id"]
+            isOneToOne: false
+            referencedRelation: "reels"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      reel_likes: {
+        Row: {
+          created_at: string
+          id: string
+          reel_id: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          reel_id: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          reel_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "reel_likes_reel_id_fkey"
+            columns: ["reel_id"]
+            isOneToOne: false
+            referencedRelation: "reels"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      reels: {
+        Row: {
+          caption: string | null
+          comments_count: number
+          created_at: string
+          duration_seconds: number | null
+          filter: string | null
+          id: string
+          likes_count: number
+          music_name: string | null
+          text_overlay: string | null
+          thumbnail_url: string | null
+          updated_at: string
+          user_id: string
+          video_url: string
+          views_count: number
+        }
+        Insert: {
+          caption?: string | null
+          comments_count?: number
+          created_at?: string
+          duration_seconds?: number | null
+          filter?: string | null
+          id?: string
+          likes_count?: number
+          music_name?: string | null
+          text_overlay?: string | null
+          thumbnail_url?: string | null
+          updated_at?: string
+          user_id: string
+          video_url: string
+          views_count?: number
+        }
+        Update: {
+          caption?: string | null
+          comments_count?: number
+          created_at?: string
+          duration_seconds?: number | null
+          filter?: string | null
+          id?: string
+          likes_count?: number
+          music_name?: string | null
+          text_overlay?: string | null
+          thumbnail_url?: string | null
+          updated_at?: string
+          user_id?: string
+          video_url?: string
+          views_count?: number
+        }
+        Relationships: []
+      }
       reposts: {
         Row: {
           created_at: string
