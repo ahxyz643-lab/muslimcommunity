@@ -215,6 +215,11 @@ const Reels = () => {
     } catch { toast({ title: "Could not copy", variant: "destructive" }); }
   };
 
+  const handleView = async (reel: Reel) => {
+    await supabase.from("reels").update({ views_count: reel.views_count + 1 }).eq("id", reel.id);
+    setReels((prev) => prev.map((r) => r.id === reel.id ? { ...r, views_count: r.views_count + 1 } : r));
+  };
+
   return (
     <div className="fixed inset-0 z-40 bg-black">
       {/* Header */}
@@ -262,6 +267,7 @@ const Reels = () => {
                 onShare={() => handleShare(reel)}
                 muted={muted}
                 onToggleMute={() => setMuted((m) => !m)}
+                onView={() => handleView(reel)}
               />
             </div>
           ))}
