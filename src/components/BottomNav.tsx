@@ -1,9 +1,9 @@
-import { Home, Compass, PlusSquare, MessageCircle, User } from "lucide-react";
+import { Home, Clapperboard, PlusSquare, MessageCircle, User } from "lucide-react";
 import { useLocation, useNavigate } from "react-router-dom";
 
 const navItems = [
   { icon: Home, label: "Home", path: "/" },
-  { icon: Compass, label: "Explore", path: "/explore" },
+  { icon: Clapperboard, label: "Reels", path: "/reels" },
   { icon: PlusSquare, label: "Create", path: "/create" },
   { icon: MessageCircle, label: "Messages", path: "/messages" },
   { icon: User, label: "Profile", path: "/profile" },
