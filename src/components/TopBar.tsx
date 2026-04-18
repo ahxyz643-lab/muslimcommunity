@@ -1,4 +1,4 @@
-import { Bell } from "lucide-react";
+import { Bell, PlusSquare } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { useQuery } from "@tanstack/react-query";
@@ -29,7 +29,14 @@ const TopBar = () => {
           <span className="text-emerald-brand">Muslim</span>
           <span className="text-gold">Community</span>
         </h1>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1">
+          <button
+            onClick={() => navigate("/create")}
+            className="rounded-full p-2 text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
+            aria-label="Create post"
+          >
+            <PlusSquare className="h-5 w-5" />
+          </button>
           <button
             onClick={() => navigate("/activity")}
             className="relative rounded-full p-2 text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
