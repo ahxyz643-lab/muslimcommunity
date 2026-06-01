@@ -55,6 +55,8 @@ const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
 
 const AppRoutes = () => {
   const { user } = useAuth();
+  const location = (typeof window !== "undefined" ? window.location.pathname : "");
+  const onAdmin = location.startsWith("/admin");
 
   return (
     <div className="mx-auto min-h-screen max-w-lg">
@@ -96,7 +98,7 @@ const AppRoutes = () => {
         <Route path="/reels/create" element={<ProtectedRoute><CreateReel /></ProtectedRoute>} />
         <Route path="*" element={<NotFound />} />
       </Routes>
-      {user && <BottomNav />}
+      {user && !onAdmin && <BottomNav />}
     </div>
   );
 };
