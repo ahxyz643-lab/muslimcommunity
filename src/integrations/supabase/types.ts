@@ -14,6 +14,57 @@ export type Database = {
   }
   public: {
     Tables: {
+      admin_logs: {
+        Row: {
+          action: string
+          admin_id: string
+          created_at: string
+          id: string
+          meta: Json | null
+          target_id: string | null
+          target_type: string | null
+        }
+        Insert: {
+          action: string
+          admin_id: string
+          created_at?: string
+          id?: string
+          meta?: Json | null
+          target_id?: string | null
+          target_type?: string | null
+        }
+        Update: {
+          action?: string
+          admin_id?: string
+          created_at?: string
+          id?: string
+          meta?: Json | null
+          target_id?: string | null
+          target_type?: string | null
+        }
+        Relationships: []
+      }
+      app_settings: {
+        Row: {
+          key: string
+          updated_at: string
+          updated_by: string | null
+          value: Json
+        }
+        Insert: {
+          key: string
+          updated_at?: string
+          updated_by?: string | null
+          value?: Json
+        }
+        Update: {
+          key?: string
+          updated_at?: string
+          updated_by?: string | null
+          value?: Json
+        }
+        Relationships: []
+      }
       call_logs: {
         Row: {
           call_type: string
@@ -139,6 +190,54 @@ export type Database = {
         }
         Relationships: []
       }
+      donations: {
+        Row: {
+          amount: number | null
+          contact: string | null
+          created_at: string
+          currency: string | null
+          description: string | null
+          flagged: boolean
+          id: string
+          kind: string
+          status: string
+          title: string
+          updated_at: string
+          user_id: string
+          verified: boolean
+        }
+        Insert: {
+          amount?: number | null
+          contact?: string | null
+          created_at?: string
+          currency?: string | null
+          description?: string | null
+          flagged?: boolean
+          id?: string
+          kind: string
+          status?: string
+          title: string
+          updated_at?: string
+          user_id: string
+          verified?: boolean
+        }
+        Update: {
+          amount?: number | null
+          contact?: string | null
+          created_at?: string
+          currency?: string | null
+          description?: string | null
+          flagged?: boolean
+          id?: string
+          kind?: string
+          status?: string
+          title?: string
+          updated_at?: string
+          user_id?: string
+          verified?: boolean
+        }
+        Relationships: []
+      }
       follows: {
         Row: {
           created_at: string
@@ -157,6 +256,78 @@ export type Database = {
           follower_id?: string
           following_id?: string
           id?: string
+        }
+        Relationships: []
+      }
+      job_applications: {
+        Row: {
+          applicant_id: string
+          created_at: string
+          id: string
+          job_id: string
+          message: string | null
+        }
+        Insert: {
+          applicant_id: string
+          created_at?: string
+          id?: string
+          job_id: string
+          message?: string | null
+        }
+        Update: {
+          applicant_id?: string
+          created_at?: string
+          id?: string
+          job_id?: string
+          message?: string | null
+        }
+        Relationships: []
+      }
+      jobs: {
+        Row: {
+          applicants_count: number
+          company: string | null
+          contact_link: string | null
+          created_at: string
+          description: string
+          id: string
+          job_type: string | null
+          location: string | null
+          poster_id: string
+          salary_range: string | null
+          status: string
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          applicants_count?: number
+          company?: string | null
+          contact_link?: string | null
+          created_at?: string
+          description: string
+          id?: string
+          job_type?: string | null
+          location?: string | null
+          poster_id: string
+          salary_range?: string | null
+          status?: string
+          title: string
+          updated_at?: string
+        }
+        Update: {
+          applicants_count?: number
+          company?: string | null
+          contact_link?: string | null
+          created_at?: string
+          description?: string
+          id?: string
+          job_type?: string | null
+          location?: string | null
+          poster_id?: string
+          salary_range?: string | null
+          status?: string
+          title?: string
+          updated_at?: string
         }
         Relationships: []
       }
@@ -268,6 +439,7 @@ export type Database = {
           comments_count: number
           content: string
           created_at: string
+          hidden: boolean
           id: string
           image_url: string | null
           language: string | null
@@ -282,6 +454,7 @@ export type Database = {
           comments_count?: number
           content: string
           created_at?: string
+          hidden?: boolean
           id?: string
           image_url?: string | null
           language?: string | null
@@ -296,6 +469,7 @@ export type Database = {
           comments_count?: number
           content?: string
           created_at?: string
+          hidden?: boolean
           id?: string
           image_url?: string | null
           language?: string | null
@@ -427,9 +601,11 @@ export type Database = {
           created_at: string
           duration_seconds: number | null
           filter: string | null
+          hidden: boolean
           id: string
           likes_count: number
           music_name: string | null
+          restricted: boolean
           text_overlay: string | null
           thumbnail_url: string | null
           updated_at: string
@@ -443,9 +619,11 @@ export type Database = {
           created_at?: string
           duration_seconds?: number | null
           filter?: string | null
+          hidden?: boolean
           id?: string
           likes_count?: number
           music_name?: string | null
+          restricted?: boolean
           text_overlay?: string | null
           thumbnail_url?: string | null
           updated_at?: string
@@ -459,15 +637,59 @@ export type Database = {
           created_at?: string
           duration_seconds?: number | null
           filter?: string | null
+          hidden?: boolean
           id?: string
           likes_count?: number
           music_name?: string | null
+          restricted?: boolean
           text_overlay?: string | null
           thumbnail_url?: string | null
           updated_at?: string
           user_id?: string
           video_url?: string
           views_count?: number
+        }
+        Relationships: []
+      }
+      reports: {
+        Row: {
+          ai_flag: boolean
+          created_at: string
+          details: string | null
+          id: string
+          reason: string
+          reporter_id: string
+          resolved_at: string | null
+          resolved_by: string | null
+          status: string
+          target_id: string
+          target_type: string
+        }
+        Insert: {
+          ai_flag?: boolean
+          created_at?: string
+          details?: string | null
+          id?: string
+          reason: string
+          reporter_id: string
+          resolved_at?: string | null
+          resolved_by?: string | null
+          status?: string
+          target_id: string
+          target_type: string
+        }
+        Update: {
+          ai_flag?: boolean
+          created_at?: string
+          details?: string | null
+          id?: string
+          reason?: string
+          reporter_id?: string
+          resolved_at?: string | null
+          resolved_by?: string | null
+          status?: string
+          target_id?: string
+          target_type?: string
         }
         Relationships: []
       }
@@ -529,6 +751,81 @@ export type Database = {
           },
         ]
       }
+      scheduled_notifications: {
+        Row: {
+          body: string | null
+          created_at: string
+          created_by: string
+          id: string
+          scheduled_for: string | null
+          sent: boolean
+          target: string
+          target_user_ids: string[] | null
+          title: string
+        }
+        Insert: {
+          body?: string | null
+          created_at?: string
+          created_by: string
+          id?: string
+          scheduled_for?: string | null
+          sent?: boolean
+          target?: string
+          target_user_ids?: string[] | null
+          title: string
+        }
+        Update: {
+          body?: string | null
+          created_at?: string
+          created_by?: string
+          id?: string
+          scheduled_for?: string | null
+          sent?: boolean
+          target?: string
+          target_user_ids?: string[] | null
+          title?: string
+        }
+        Relationships: []
+      }
+      support_tickets: {
+        Row: {
+          assigned_to: string | null
+          created_at: string
+          id: string
+          message: string
+          priority: string
+          response: string | null
+          status: string
+          subject: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          assigned_to?: string | null
+          created_at?: string
+          id?: string
+          message: string
+          priority?: string
+          response?: string | null
+          status?: string
+          subject: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          assigned_to?: string | null
+          created_at?: string
+          id?: string
+          message?: string
+          priority?: string
+          response?: string | null
+          status?: string
+          subject?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       user_roles: {
         Row: {
           id: string
@@ -559,13 +856,14 @@ export type Database = {
         }
         Returns: boolean
       }
+      is_admin_tier: { Args: { _user_id: string }; Returns: boolean }
       is_conversation_participant: {
         Args: { _conversation_id: string; _user_id: string }
         Returns: boolean
       }
     }
     Enums: {
-      app_role: "admin" | "moderator" | "user"
+      app_role: "admin" | "moderator" | "user" | "support"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -693,7 +991,7 @@ export type CompositeTypes<
 export const Constants = {
   public: {
     Enums: {
-      app_role: ["admin", "moderator", "user"],
+      app_role: ["admin", "moderator", "user", "support"],
     },
   },
 } as const

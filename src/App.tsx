@@ -3,7 +3,7 @@ import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate, useLocation } from "react-router-dom";
 import { AuthProvider, useAuth } from "@/contexts/AuthContext";
 import { ThemeProvider } from "@/contexts/ThemeContext";
 import SplashScreen from "@/components/SplashScreen";
@@ -20,10 +20,29 @@ import CreatorStudio from "@/pages/CreatorStudio";
 import Auth from "@/pages/Auth";
 import Welcome from "@/pages/Welcome";
 import UserProfilePage from "@/pages/UserProfilePage";
-import Admin from "@/pages/Admin";
 import Reels from "@/pages/Reels";
 import CreateReel from "@/pages/CreateReel";
 import NotFound from "@/pages/NotFound";
+import AdminLayout from "@/components/admin/AdminLayout";
+import AdminDashboard from "@/pages/admin/AdminDashboard";
+import AdminUsers from "@/pages/admin/AdminUsers";
+import AdminVerification from "@/pages/admin/AdminVerification";
+import AdminContent from "@/pages/admin/AdminContent";
+import AdminReels from "@/pages/admin/AdminReels";
+import AdminComments from "@/pages/admin/AdminComments";
+import AdminChats from "@/pages/admin/AdminChats";
+import AdminJobs from "@/pages/admin/AdminJobs";
+import AdminDonations from "@/pages/admin/AdminDonations";
+import AdminReports from "@/pages/admin/AdminReports";
+import AdminStorage from "@/pages/admin/AdminStorage";
+import AdminAnalytics from "@/pages/admin/AdminAnalytics";
+import AdminNotifications from "@/pages/admin/AdminNotifications";
+import AdminRoles from "@/pages/admin/AdminRoles";
+import AdminSettings from "@/pages/admin/AdminSettings";
+import AdminSecurity from "@/pages/admin/AdminSecurity";
+import AdminSupport from "@/pages/admin/AdminSupport";
+import AdminMonetization from "@/pages/admin/AdminMonetization";
+import AdminAI from "@/pages/admin/AdminAI";
 
 const queryClient = new QueryClient();
 
@@ -36,6 +55,8 @@ const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
 
 const AppRoutes = () => {
   const { user } = useAuth();
+  const loc = useLocation();
+  const onAdmin = loc.pathname.startsWith("/admin");
 
   return (
     <div className="mx-auto min-h-screen max-w-lg">
@@ -52,12 +73,32 @@ const AppRoutes = () => {
         <Route path="/settings" element={<ProtectedRoute><Settings /></ProtectedRoute>} />
         <Route path="/activity" element={<ProtectedRoute><Activity /></ProtectedRoute>} />
         <Route path="/creator-studio" element={<ProtectedRoute><CreatorStudio /></ProtectedRoute>} />
-        <Route path="/admin" element={<ProtectedRoute><Admin /></ProtectedRoute>} />
+        <Route path="/admin" element={<ProtectedRoute><AdminLayout /></ProtectedRoute>}>
+          <Route index element={<AdminDashboard />} />
+          <Route path="users" element={<AdminUsers />} />
+          <Route path="verification" element={<AdminVerification />} />
+          <Route path="content" element={<AdminContent />} />
+          <Route path="reels" element={<AdminReels />} />
+          <Route path="comments" element={<AdminComments />} />
+          <Route path="chats" element={<AdminChats />} />
+          <Route path="jobs" element={<AdminJobs />} />
+          <Route path="donations" element={<AdminDonations />} />
+          <Route path="reports" element={<AdminReports />} />
+          <Route path="storage" element={<AdminStorage />} />
+          <Route path="analytics" element={<AdminAnalytics />} />
+          <Route path="notifications" element={<AdminNotifications />} />
+          <Route path="roles" element={<AdminRoles />} />
+          <Route path="settings" element={<AdminSettings />} />
+          <Route path="security" element={<AdminSecurity />} />
+          <Route path="support" element={<AdminSupport />} />
+          <Route path="monetization" element={<AdminMonetization />} />
+          <Route path="ai" element={<AdminAI />} />
+        </Route>
         <Route path="/reels" element={<ProtectedRoute><Reels /></ProtectedRoute>} />
         <Route path="/reels/create" element={<ProtectedRoute><CreateReel /></ProtectedRoute>} />
         <Route path="*" element={<NotFound />} />
       </Routes>
-      {user && <BottomNav />}
+      {user && !onAdmin && <BottomNav />}
     </div>
   );
 };
