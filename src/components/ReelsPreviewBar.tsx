@@ -2,10 +2,12 @@ import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Play, Plus } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
+import { getVideoSrc } from "@/lib/video";
 
 interface ReelPreview {
   id: string;
   video_url: string;
+  telegram_file_id: string | null;
   user_id: string;
   username: string | null;
   avatar_url: string | null;
@@ -18,13 +20,13 @@ const ReelsPreviewBar = () => {
 
   useEffect(() => {
     (async () => {
-      const { data } = await supabase.from("reels").select("id, video_url, user_id").order("created_at", { ascending: false }).limit(8);
+      const { data } = await supabase.from("reels").select("id, video_url, telegram_file_id, user_id").order("created_at", { ascending: false }).limit(8);
       if (!data?.length) { setLoading(false); return; }
       const userIds = [...new Set(data.map((r) => r.user_id))];
       const { data: profiles } = await supabase.from("profiles").select("user_id, username, avatar_url").in("user_id", userIds);
       const map = new Map(profiles?.map((p) => [p.user_id, p]) || []);
       setReels(data.map((r) => ({
-        id: r.id, video_url: r.video_url, user_id: r.user_id,
+        id: r.id, video_url: r.video_url, telegram_file_id: r.telegram_file_id, user_id: r.user_id,
         username: map.get(r.user_id)?.username || null,
         avatar_url: map.get(r.user_id)?.avatar_url || null,
       })));
@@ -60,7 +62,7 @@ const ReelsPreviewBar = () => {
             className="group relative h-40 w-28 flex-shrink-0 overflow-hidden rounded-2xl bg-secondary"
           >
             <video
-              src={r.video_url}
+              src={getVideoSrc(r)}
               muted
               playsInline
               preload="metadata"
