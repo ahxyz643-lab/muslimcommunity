@@ -8,6 +8,7 @@ import { fetchPostsWithProfiles } from "@/lib/posts";
 import PostCard from "@/components/PostCard";
 import VerifiedBadge from "@/components/VerifiedBadge";
 import heroPattern from "@/assets/hero-pattern.jpg";
+import { getVideoSrc } from "@/lib/video";
 
 const Profile = () => {
   const { user } = useAuth();
