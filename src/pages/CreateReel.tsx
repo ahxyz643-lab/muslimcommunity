@@ -136,7 +136,7 @@ const CreateReel = () => {
             </div>
             <div className="text-center">
               <p className="text-base font-semibold text-white">Upload a video</p>
-              <p className="mt-1 text-xs text-white/60">MP4, MOV up to 100MB · max 60s</p>
+              <p className="mt-1 text-xs text-white/60">MP4, MOV up to 20MB · max 60s</p>
             </div>
           </button>
           <input ref={fileInputRef} type="file" accept="video/*" onChange={handleFileSelect} className="hidden" />
