@@ -5,11 +5,13 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
 import VerifiedBadge from "@/components/VerifiedBadge";
+import { getVideoSrc } from "@/lib/video";
 
 interface Reel {
   id: string;
   user_id: string;
   video_url: string;
+  telegram_file_id?: string | null;
   caption: string | null;
   music_name: string | null;
   filter: string | null;
@@ -72,7 +74,7 @@ const ReelItem = ({ reel, isActive, onLike, onComment, onShare, muted, onToggleM
     <div className="relative h-full w-full snap-start snap-always overflow-hidden bg-black">
       <video
         ref={videoRef}
-        src={reel.video_url}
+        src={getVideoSrc(reel)}
         loop
         playsInline
         muted={muted}
