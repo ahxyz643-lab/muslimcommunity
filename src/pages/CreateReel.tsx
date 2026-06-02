@@ -4,6 +4,7 @@ import { X, Upload, Loader2, Music, Type, Sparkles, Scissors, Play, Pause } from
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
+import { uploadVideoToTelegram } from "@/lib/video";
 
 const FILTERS = [
   { id: "none", label: "Original", css: "" },
@@ -62,8 +63,8 @@ const CreateReel = () => {
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const f = e.target.files?.[0];
     if (!f) return;
-    if (f.size > 100 * 1024 * 1024) {
-      toast({ title: "File too large", description: "Max 100MB", variant: "destructive" });
+    if (f.size > 20 * 1024 * 1024) {
+      toast({ title: "File too large", description: "Max 20MB (Telegram storage)", variant: "destructive" });
       return;
     }
     setFile(f);
@@ -91,15 +92,12 @@ const CreateReel = () => {
     if (!user || !file) return;
     setPosting(true);
     try {
-      const ext = file.name.split(".").pop() || "mp4";
-      const path = `${user.id}/${Date.now()}.${ext}`;
-      const { error: upErr } = await supabase.storage.from("reels").upload(path, file);
-      if (upErr) throw upErr;
-      const { data: urlData } = supabase.storage.from("reels").getPublicUrl(path);
+      const fileId = await uploadVideoToTelegram(file, caption.trim() || undefined);
 
       const { error } = await supabase.from("reels").insert({
         user_id: user.id,
-        video_url: urlData.publicUrl,
+        video_url: "",
+        telegram_file_id: fileId,
         caption: caption.trim() || null,
         music_name: music,
         filter: filter === "none" ? null : filter,
@@ -138,7 +136,7 @@ const CreateReel = () => {
             </div>
             <div className="text-center">
               <p className="text-base font-semibold text-white">Upload a video</p>
-              <p className="mt-1 text-xs text-white/60">MP4, MOV up to 100MB · max 60s</p>
+              <p className="mt-1 text-xs text-white/60">MP4, MOV up to 20MB · max 60s</p>
             </div>
           </button>
           <input ref={fileInputRef} type="file" accept="video/*" onChange={handleFileSelect} className="hidden" />

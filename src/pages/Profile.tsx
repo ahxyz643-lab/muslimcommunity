@@ -8,6 +8,7 @@ import { fetchPostsWithProfiles } from "@/lib/posts";
 import PostCard from "@/components/PostCard";
 import VerifiedBadge from "@/components/VerifiedBadge";
 import heroPattern from "@/assets/hero-pattern.jpg";
+import { getVideoSrc } from "@/lib/video";
 
 const Profile = () => {
   const { user } = useAuth();
@@ -164,7 +165,7 @@ const Profile = () => {
                   className="group relative aspect-[9/16] overflow-hidden bg-secondary"
                 >
                   <video
-                    src={reel.video_url}
+                    src={getVideoSrc(reel)}
                     muted
                     playsInline
                     preload="metadata"

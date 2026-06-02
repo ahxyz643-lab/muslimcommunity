@@ -4,6 +4,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { Eye, EyeOff, Trash2, Ban, Play } from "lucide-react";
 import { Btn, Pill, Spinner } from "@/components/admin/ui";
 import { useToast } from "@/hooks/use-toast";
+import { getVideoSrc } from "@/lib/video";
 
 export default function AdminReels() {
   const qc = useQueryClient();
@@ -44,7 +45,7 @@ export default function AdminReels() {
           {reels.map((r: any) => (
             <div key={r.id} className={`overflow-hidden rounded-xl border border-border bg-card ${r.hidden ? "opacity-60" : ""}`}>
               <div className="relative aspect-[9/16] bg-black">
-                <video src={r.video_url} className="h-full w-full object-cover" muted preload="metadata" />
+                <video src={getVideoSrc(r)} className="h-full w-full object-cover" muted preload="metadata" />
                 <div className="absolute bottom-1 left-1 flex items-center gap-1 rounded bg-black/60 px-1.5 py-0.5 text-[10px] text-white">
                   <Play className="h-3 w-3 fill-white" />{r.views_count || 0}
                 </div>

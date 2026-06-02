@@ -446,6 +446,7 @@ export type Database = {
           likes_count: number
           reposts_count: number
           saves_count: number
+          telegram_file_id: string | null
           updated_at: string
           user_id: string
           video_url: string | null
@@ -461,6 +462,7 @@ export type Database = {
           likes_count?: number
           reposts_count?: number
           saves_count?: number
+          telegram_file_id?: string | null
           updated_at?: string
           user_id: string
           video_url?: string | null
@@ -476,6 +478,7 @@ export type Database = {
           likes_count?: number
           reposts_count?: number
           saves_count?: number
+          telegram_file_id?: string | null
           updated_at?: string
           user_id?: string
           video_url?: string | null
@@ -606,6 +609,7 @@ export type Database = {
           likes_count: number
           music_name: string | null
           restricted: boolean
+          telegram_file_id: string | null
           text_overlay: string | null
           thumbnail_url: string | null
           updated_at: string
@@ -624,6 +628,7 @@ export type Database = {
           likes_count?: number
           music_name?: string | null
           restricted?: boolean
+          telegram_file_id?: string | null
           text_overlay?: string | null
           thumbnail_url?: string | null
           updated_at?: string
@@ -642,6 +647,7 @@ export type Database = {
           likes_count?: number
           music_name?: string | null
           restricted?: boolean
+          telegram_file_id?: string | null
           text_overlay?: string | null
           thumbnail_url?: string | null
           updated_at?: string

@@ -5,6 +5,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
 import { useQuery } from "@tanstack/react-query";
+import { uploadVideoToTelegram } from "@/lib/video";
 
 const CreatePost = () => {
   const navigate = useNavigate();
@@ -33,9 +34,9 @@ const CreatePost = () => {
     if (!file) return;
 
     // Validate size
-    const maxSize = selectedType === "photo" ? 10 * 1024 * 1024 : 100 * 1024 * 1024;
+    const maxSize = selectedType === "photo" ? 10 * 1024 * 1024 : 20 * 1024 * 1024;
     if (file.size > maxSize) {
-      toast({ title: "File too large", description: `Max ${selectedType === "photo" ? "10MB" : "100MB"}`, variant: "destructive" });
+      toast({ title: "File too large", description: `Max ${selectedType === "photo" ? "10MB" : "20MB"}`, variant: "destructive" });
       return;
     }
 
@@ -69,18 +70,19 @@ const CreatePost = () => {
     try {
       let imageUrl: string | null = null;
       let videoUrl: string | null = null;
+      let telegramFileId: string | null = null;
 
       if (mediaFile) {
-        const ext = mediaFile.name.split(".").pop();
-        const path = `${user.id}/${Date.now()}.${ext}`;
-        const { error: uploadErr } = await supabase.storage.from("media").upload(path, mediaFile);
-        if (uploadErr) throw uploadErr;
-
-        const { data: urlData } = supabase.storage.from("media").getPublicUrl(path);
         if (selectedType === "photo") {
+          const ext = mediaFile.name.split(".").pop();
+          const path = `${user.id}/${Date.now()}.${ext}`;
+          const { error: uploadErr } = await supabase.storage.from("media").upload(path, mediaFile);
+          if (uploadErr) throw uploadErr;
+          const { data: urlData } = supabase.storage.from("media").getPublicUrl(path);
           imageUrl = urlData.publicUrl;
         } else {
-          videoUrl = urlData.publicUrl;
+          telegramFileId = await uploadVideoToTelegram(mediaFile, content.trim() || undefined);
+          videoUrl = "";
         }
       }
 
@@ -89,6 +91,7 @@ const CreatePost = () => {
         content: content.trim(),
         image_url: imageUrl,
         video_url: videoUrl,
+        telegram_file_id: telegramFileId,
       });
 
       if (error) throw error;
@@ -221,7 +224,7 @@ const CreatePost = () => {
               )}
               <p className="text-sm text-muted-foreground">Tap to upload {selectedType}</p>
               <p className="mt-1 text-xs text-muted-foreground/60">
-                {selectedType === "photo" ? "JPG, PNG up to 10MB" : "MP4, MOV up to 100MB"}
+                {selectedType === "photo" ? "JPG, PNG up to 10MB" : "MP4, MOV up to 20MB"}
               </p>
             </div>
           </div>
