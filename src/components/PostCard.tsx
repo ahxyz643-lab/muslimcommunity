@@ -188,7 +188,7 @@ const PostCard = ({ post, onDelete }: { post: PostWithProfile; onDelete?: (id: s
           </div>
         )}
 
-        {post.video_url && (
+        {(post.video_url || post.telegram_file_id) && (
           <div className="relative px-4 pb-3">
             <video ref={videoRef} src={getVideoSrc(post)} className="w-full rounded-xl object-cover" style={{ maxHeight: 400 }} onEnded={() => setIsPlaying(false)} playsInline />
             {!isPlaying && (
