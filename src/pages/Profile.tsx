@@ -165,7 +165,7 @@ const Profile = () => {
                   className="group relative aspect-[9/16] overflow-hidden bg-secondary"
                 >
                   <video
-                    src={reel.video_url}
+                    src={getVideoSrc(reel)}
                     muted
                     playsInline
                     preload="metadata"
