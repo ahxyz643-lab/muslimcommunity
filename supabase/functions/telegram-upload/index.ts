@@ -38,13 +38,23 @@ Deno.serve(async (req) => {
       return new Response(JSON.stringify({ error: "Video too large (max 20MB for Telegram storage)" }), { status: 413, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
+    // Telegram's sendVideo only reliably plays mp4/h.264. For anything else,
+    // upload as a document so the original bytes are preserved and can be streamed back.
+    const mime = (file.type || "").toLowerCase();
+    const useSendVideo = mime === "video/mp4" || (!mime && (file.name || "").toLowerCase().endsWith(".mp4"));
+
     const tgForm = new FormData();
     tgForm.append("chat_id", CHAT_ID);
     tgForm.append("caption", caption.slice(0, 1024));
-    tgForm.append("supports_streaming", "true");
-    tgForm.append("video", file, file.name || "video.mp4");
+    if (useSendVideo) {
+      tgForm.append("supports_streaming", "true");
+      tgForm.append("video", file, file.name || "video.mp4");
+    } else {
+      tgForm.append("document", file, file.name || "video");
+    }
 
-    const tgRes = await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendVideo`, { method: "POST", body: tgForm });
+    const endpoint = useSendVideo ? "sendVideo" : "sendDocument";
+    const tgRes = await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/${endpoint}`, { method: "POST", body: tgForm });
     const tgJson = await tgRes.json();
     if (!tgJson.ok) {
       return new Response(JSON.stringify({ error: "Telegram upload failed", details: tgJson }), { status: 502, headers: { ...corsHeaders, "Content-Type": "application/json" } });
@@ -52,11 +62,12 @@ Deno.serve(async (req) => {
 
     const msg = tgJson.result;
     const fileId: string | undefined = msg?.video?.file_id || msg?.document?.file_id || msg?.animation?.file_id;
+    const mimeOut: string | undefined = msg?.video?.mime_type || msg?.document?.mime_type || msg?.animation?.mime_type;
     if (!fileId) {
       return new Response(JSON.stringify({ error: "No file_id returned", details: tgJson }), { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
-    return new Response(JSON.stringify({ file_id: fileId, message_id: msg.message_id }), {
+    return new Response(JSON.stringify({ file_id: fileId, message_id: msg.message_id, mime_type: mimeOut }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (err) {

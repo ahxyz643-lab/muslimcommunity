@@ -82,7 +82,7 @@ const CreatePost = () => {
           imageUrl = urlData.publicUrl;
         } else {
           telegramFileId = await uploadVideoToTelegram(mediaFile, content.trim() || undefined);
-          videoUrl = "";
+          videoUrl = null;
         }
       }
 
