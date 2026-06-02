@@ -7,12 +7,14 @@ import { useNavigate } from "react-router-dom";
 import { formatDistanceToNow } from "date-fns";
 import VerifiedBadge from "@/components/VerifiedBadge";
 import CommentsSheet from "@/components/CommentsSheet";
+import { getVideoSrc } from "@/lib/video";
 
 export interface PostWithProfile {
   id: string;
   content: string;
   image_url: string | null;
   video_url: string | null;
+  telegram_file_id?: string | null;
   likes_count: number;
   comments_count: number;
   reposts_count: number;
@@ -188,7 +190,7 @@ const PostCard = ({ post, onDelete }: { post: PostWithProfile; onDelete?: (id: s
 
         {post.video_url && (
           <div className="relative px-4 pb-3">
-            <video ref={videoRef} src={post.video_url} className="w-full rounded-xl object-cover" style={{ maxHeight: 400 }} onEnded={() => setIsPlaying(false)} playsInline />
+            <video ref={videoRef} src={getVideoSrc(post)} className="w-full rounded-xl object-cover" style={{ maxHeight: 400 }} onEnded={() => setIsPlaying(false)} playsInline />
             {!isPlaying && (
               <button onClick={toggleVideo} className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 flex h-14 w-14 items-center justify-center rounded-full bg-primary/80 text-primary-foreground shadow-glow">
                 <Play className="h-6 w-6 ml-0.5" />
