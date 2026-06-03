@@ -20,7 +20,8 @@ interface Comment {
   replies?: Comment[];
 }
 
-const CommentsSheet = ({ postId, onClose, onCountChange }: { postId: string; onClose: () => void; onCountChange?: (delta: number) => void }) => {
+type Target = "post" | "reel";
+const CommentsSheet = ({ postId, reelId, type = "post", onClose, onCountChange }: { postId?: string; reelId?: string; type?: Target; onClose: () => void; onCountChange?: (delta: number) => void }) => {
   const { user } = useAuth();
   const { toast } = useToast();
   const [comments, setComments] = useState<Comment[]>([]);
@@ -29,23 +30,29 @@ const CommentsSheet = ({ postId, onClose, onCountChange }: { postId: string; onC
   const [sending, setSending] = useState(false);
   const [replyTo, setReplyTo] = useState<Comment | null>(null);
 
+  const targetId = type === "reel" ? reelId : postId;
+  const tableName = type === "reel" ? "reel_comments" : "comments";
+  const fkColumn = type === "reel" ? "reel_id" : "post_id";
+  const supportsReplies = type === "post";
+
   const fetchComments = async () => {
+    if (!targetId) { setLoading(false); return; }
     const { data } = await supabase
-      .from("comments")
+      .from(tableName as any)
       .select("*")
-      .eq("post_id", postId)
+      .eq(fkColumn, targetId)
       .order("created_at", { ascending: true });
 
     if (!data) { setLoading(false); return; }
 
-    const userIds = [...new Set(data.map((c) => c.user_id))];
+    const userIds = [...new Set(data.map((c: any) => c.user_id))];
     const { data: profiles } = await supabase
       .from("profiles")
       .select("user_id, display_name, username, avatar_url, verified")
       .in("user_id", userIds);
 
     const profileMap = new Map(profiles?.map((p) => [p.user_id, p]) || []);
-    const allComments: Comment[] = data.map((c) => ({ ...c, profile: profileMap.get(c.user_id), replies: [] }));
+    const allComments: Comment[] = data.map((c: any) => ({ ...c, parent_id: c.parent_id ?? null, profile: profileMap.get(c.user_id), replies: [] }));
 
     // Build tree: separate top-level and replies
     const topLevel: Comment[] = [];
@@ -69,19 +76,20 @@ const CommentsSheet = ({ postId, onClose, onCountChange }: { postId: string; onC
     setLoading(false);
   };
 
-  useEffect(() => { fetchComments(); }, [postId]);
+  useEffect(() => { fetchComments(); }, [targetId, type]);
 
   const totalCount = comments.reduce((acc, c) => acc + 1 + (c.replies?.length || 0), 0);
 
   const handleSend = async () => {
-    if (!user || !newComment.trim()) return;
+    if (!user || !newComment.trim() || !targetId) return;
     setSending(true);
-    const { error } = await supabase.from("comments").insert({
-      post_id: postId,
+    const payload: any = {
+      [fkColumn]: targetId,
       user_id: user.id,
       content: newComment.trim(),
-      parent_id: replyTo?.id ?? null,
-    });
+    };
+    if (supportsReplies) payload.parent_id = replyTo?.id ?? null;
+    const { error } = await supabase.from(tableName as any).insert(payload);
     if (error) {
       toast({ title: "Error", description: error.message, variant: "destructive" });
     } else {
@@ -94,7 +102,7 @@ const CommentsSheet = ({ postId, onClose, onCountChange }: { postId: string; onC
   };
 
   const handleDelete = async (id: string) => {
-    await supabase.from("comments").delete().eq("id", id);
+    await supabase.from(tableName as any).delete().eq("id", id);
     onCountChange?.(-1);
     fetchComments();
   };

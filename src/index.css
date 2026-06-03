@@ -174,3 +174,12 @@
 .animate-slide-up {
   animation: slide-up 0.3s ease-out;
 }
+
+/* Hide Lovable badge */
+#lovable-badge,
+[id="lovable-badge"],
+[class*="lovable-badge"] {
+  display: none !important;
+  visibility: hidden !important;
+  pointer-events: none !important;
+}
