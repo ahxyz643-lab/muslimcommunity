@@ -9,30 +9,51 @@ Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
 
   const url = new URL(req.url);
-  const fileId = url.searchParams.get("file_id");
-  if (!fileId) return new Response("Missing file_id", { status: 400, headers: corsHeaders });
+  const raw = url.searchParams.get("file_id");
+  if (!raw) return new Response("Missing file_id", { status: 400, headers: corsHeaders });
 
-  const BOT_TOKEN = Deno.env.get("TELEGRAM_BOT_TOKEN");
-  if (!BOT_TOKEN) return new Response("Bot not configured", { status: 500, headers: corsHeaders });
+  // Parse optional bot prefix: "b1:<id>" or "b2:<id>"
+  let botKey = "b1";
+  let fileId = raw;
+  const m = raw.match(/^(b[12]):(.+)$/);
+  if (m) { botKey = m[1]; fileId = m[2]; }
+
+  const tokens: Record<string, string | undefined> = {
+    b1: Deno.env.get("TELEGRAM_BOT_TOKEN"),
+    b2: Deno.env.get("TELEGRAM_BOT_TOKEN_2"),
+  };
+  const primary = tokens[botKey];
+  const fallback = botKey === "b1" ? tokens.b2 : tokens.b1;
+  const candidates = [primary, fallback].filter(Boolean) as string[];
+  if (!candidates.length) return new Response("Bot not configured", { status: 500, headers: corsHeaders });
 
   try {
-    // Resolve file_path
-    const infoRes = await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/getFile?file_id=${encodeURIComponent(fileId)}`);
-    const infoJson = await infoRes.json();
-    if (!infoJson.ok || !infoJson.result?.file_path) {
-      return new Response(JSON.stringify({ error: "File not found", details: infoJson }), {
+    let token: string | null = null;
+    let filePath: string | null = null;
+    let lastErr: any = null;
+    for (const t of candidates) {
+      const infoRes = await fetch(`https://api.telegram.org/bot${t}/getFile?file_id=${encodeURIComponent(fileId)}`);
+      const infoJson = await infoRes.json();
+      if (infoJson.ok && infoJson.result?.file_path) {
+        token = t;
+        filePath = infoJson.result.file_path;
+        break;
+      }
+      lastErr = infoJson;
+    }
+    if (!token || !filePath) {
+      return new Response(JSON.stringify({ error: "File not found", details: lastErr }), {
         status: 404,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
-    const filePath = infoJson.result.file_path as string;
 
     // Forward Range header for video seeking
     const forwardHeaders: HeadersInit = {};
     const range = req.headers.get("range");
     if (range) (forwardHeaders as any).Range = range;
 
-    const fileRes = await fetch(`https://api.telegram.org/file/bot${BOT_TOKEN}/${filePath}`, { headers: forwardHeaders });
+    const fileRes = await fetch(`https://api.telegram.org/file/bot${token}/${filePath}`, { headers: forwardHeaders });
     const headers = new Headers(corsHeaders);
     headers.set("Content-Type", fileRes.headers.get("content-type") || "video/mp4");
     headers.set("Accept-Ranges", "bytes");
