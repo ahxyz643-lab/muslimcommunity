@@ -1,11 +1,15 @@
 import { useQuery } from "@tanstack/react-query";
+import { useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
-import { HardDrive, Database, CheckCircle2, Activity } from "lucide-react";
+import { HardDrive, Database, CheckCircle2, Activity, Trash2, Loader2 } from "lucide-react";
+import { useToast } from "@/hooks/use-toast";
 import { StatCard, Section, Spinner, MiniBars } from "@/components/admin/ui";
 
 const TOTAL_GB = 100;
 
 export default function AdminStorage() {
+  const { toast } = useToast();
+  const [wiping, setWiping] = useState(false);
   const { data, isLoading } = useQuery({
     queryKey: ["adm-storage"],
     queryFn: async () => {
@@ -28,6 +32,25 @@ export default function AdminStorage() {
   const usedGB = data.totalBytes / 1073741824;
   const remainGB = TOTAL_GB - usedGB;
   const pct = Math.min(100, (usedGB / TOTAL_GB) * 100);
+
+  const handleWipe = async () => {
+    if (!confirm("Permanently delete ALL legacy videos from Supabase storage? Telegram-hosted videos won't be affected.")) return;
+    setWiping(true);
+    try {
+      const { data: sess } = await supabase.auth.getSession();
+      const token = sess.session?.access_token;
+      const res = await fetch(`https://${import.meta.env.VITE_SUPABASE_PROJECT_ID}.supabase.co/functions/v1/admin-wipe-videos`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || "Failed");
+      toast({ title: "Wipe complete", description: `media: ${json.summary?.media?.deleted ?? 0} files, reels: ${json.summary?.reels?.deleted ?? 0} files` });
+    } catch (e: any) {
+      toast({ title: "Wipe failed", description: e.message, variant: "destructive" });
+    }
+    setWiping(false);
+  };
 
   return (
     <div className="space-y-4">
@@ -64,6 +87,20 @@ export default function AdminStorage() {
           </div>
         </div>
         <div className="mt-3"><MiniBars data={Array.from({length:24},() => Math.round(Math.random()*50)+30)} /></div>
+      </Section>
+
+      <Section title="Danger zone">
+        <p className="text-xs text-muted-foreground mb-3">
+          Videos ab Telegram pe store hote hain. Purani Supabase storage videos ko delete karke space free karo.
+        </p>
+        <button
+          onClick={handleWipe}
+          disabled={wiping}
+          className="flex items-center gap-2 rounded-xl bg-destructive px-4 py-2.5 text-sm font-semibold text-destructive-foreground disabled:opacity-50"
+        >
+          {wiping ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+          Wipe legacy videos
+        </button>
       </Section>
     </div>
   );
