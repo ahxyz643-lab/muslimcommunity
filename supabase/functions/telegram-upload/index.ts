@@ -21,9 +21,11 @@ Deno.serve(async (req) => {
       return new Response(JSON.stringify({ error: "Unauthorized" }), { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
-    const BOT_TOKEN = Deno.env.get("TELEGRAM_BOT_TOKEN");
-    const CHAT_ID = Deno.env.get("TELEGRAM_CHANNEL_ID");
-    if (!BOT_TOKEN || !CHAT_ID) {
+    const BOTS = [
+      { id: "b1", token: Deno.env.get("TELEGRAM_BOT_TOKEN"), chat: Deno.env.get("TELEGRAM_CHANNEL_ID") },
+      { id: "b2", token: Deno.env.get("TELEGRAM_BOT_TOKEN_2"), chat: Deno.env.get("TELEGRAM_CHANNEL_ID_2") },
+    ].filter(b => b.token && b.chat);
+    if (!BOTS.length) {
       return new Response(JSON.stringify({ error: "Telegram bot not configured" }), { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
@@ -43,31 +45,42 @@ Deno.serve(async (req) => {
     const mime = (file.type || "").toLowerCase();
     const useSendVideo = mime === "video/mp4" || (!mime && (file.name || "").toLowerCase().endsWith(".mp4"));
 
-    const tgForm = new FormData();
-    tgForm.append("chat_id", CHAT_ID);
-    tgForm.append("caption", caption.slice(0, 1024));
-    if (useSendVideo) {
-      tgForm.append("supports_streaming", "true");
-      tgForm.append("video", file, file.name || "video.mp4");
-    } else {
-      tgForm.append("document", file, file.name || "video");
-    }
-
     const endpoint = useSendVideo ? "sendVideo" : "sendDocument";
-    const tgRes = await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/${endpoint}`, { method: "POST", body: tgForm });
-    const tgJson = await tgRes.json();
-    if (!tgJson.ok) {
-      return new Response(JSON.stringify({ error: "Telegram upload failed", details: tgJson }), { status: 502, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    const fileBuf = await file.arrayBuffer();
+    let msg: any = null;
+    let usedBot: string | null = null;
+    let lastErr: any = null;
+    for (const bot of BOTS) {
+      const tgForm = new FormData();
+      tgForm.append("chat_id", bot.chat!);
+      tgForm.append("caption", caption.slice(0, 1024));
+      const blob = new Blob([fileBuf], { type: file.type || "application/octet-stream" });
+      if (useSendVideo) {
+        tgForm.append("supports_streaming", "true");
+        tgForm.append("video", blob, file.name || "video.mp4");
+      } else {
+        tgForm.append("document", blob, file.name || "video");
+      }
+      const tgRes = await fetch(`https://api.telegram.org/bot${bot.token}/${endpoint}`, { method: "POST", body: tgForm });
+      const tgJson = await tgRes.json();
+      if (tgJson.ok) {
+        msg = tgJson.result;
+        usedBot = bot.id;
+        break;
+      }
+      lastErr = tgJson;
     }
-
-    const msg = tgJson.result;
+    if (!msg || !usedBot) {
+      return new Response(JSON.stringify({ error: "All Telegram bots failed", details: lastErr }), { status: 502, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    }
     const fileId: string | undefined = msg?.video?.file_id || msg?.document?.file_id || msg?.animation?.file_id;
     const mimeOut: string | undefined = msg?.video?.mime_type || msg?.document?.mime_type || msg?.animation?.mime_type;
     if (!fileId) {
       return new Response(JSON.stringify({ error: "No file_id returned", details: tgJson }), { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
-    return new Response(JSON.stringify({ file_id: fileId, message_id: msg.message_id, mime_type: mimeOut }), {
+    // Prefix file_id with bot id so we know which token to use on retrieval
+    return new Response(JSON.stringify({ file_id: `${usedBot}:${fileId}`, message_id: msg.message_id, mime_type: mimeOut, bot: usedBot }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (err) {

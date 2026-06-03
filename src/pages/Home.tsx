@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, Fragment } from "react";
 import TopBar from "@/components/TopBar";
 import PostCard, { PostWithProfile } from "@/components/PostCard";
 import ReelsPreviewBar from "@/components/ReelsPreviewBar";
@@ -41,7 +41,17 @@ const Home = () => {
           <p className="mt-1 text-sm text-muted-foreground">Be the first to share something!</p>
         </div>
       ) : (
-        <div className="divide-y divide-border">{posts.map((post) => <PostCard key={post.id} post={post} onDelete={handleDelete} />)}</div>
+        <div className="divide-y divide-border">
+          {posts.map((post, idx) => (
+            <Fragment key={post.id}>
+              <PostCard post={post} onDelete={handleDelete} />
+              {/* Inject a Reels strip every 5 posts for Instagram-like feed */}
+              {(idx + 1) % 5 === 0 && idx !== posts.length - 1 && (
+                <ReelsPreviewBar />
+              )}
+            </Fragment>
+          ))}
+        </div>
       )}
     </div>
   );

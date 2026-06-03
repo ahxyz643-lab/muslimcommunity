@@ -5,6 +5,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
 import VerifiedBadge from "@/components/VerifiedBadge";
+import CommentsSheet from "@/components/CommentsSheet";
 import { getVideoSrc } from "@/lib/video";
 
 interface Reel {
@@ -156,6 +157,7 @@ const Reels = () => {
   const [loading, setLoading] = useState(true);
   const [activeIdx, setActiveIdx] = useState(0);
   const [muted, setMuted] = useState(true);
+  const [commentReelId, setCommentReelId] = useState<string | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
   const loadReels = useCallback(async () => {
@@ -265,7 +267,7 @@ const Reels = () => {
                 reel={reel}
                 isActive={idx === activeIdx}
                 onLike={() => handleLike(reel)}
-                onComment={() => toast({ title: "Comments coming soon" })}
+                onComment={() => setCommentReelId(reel.id)}
                 onShare={() => handleShare(reel)}
                 muted={muted}
                 onToggleMute={() => setMuted((m) => !m)}
@@ -274,6 +276,15 @@ const Reels = () => {
             </div>
           ))}
         </div>
+      )}
+
+      {commentReelId && (
+        <CommentsSheet
+          type="reel"
+          reelId={commentReelId}
+          onClose={() => setCommentReelId(null)}
+          onCountChange={(d) => setReels((prev) => prev.map((r) => r.id === commentReelId ? { ...r, comments_count: Math.max(0, r.comments_count + d) } : r))}
+        />
       )}
     </div>
   );
