@@ -201,10 +201,9 @@ const CommentsSheet = ({ postId, reelId, type = "post", onClose, onCountChange }
             )}
             <div className="flex items-center gap-2">
               <img
-                src={undefined}
+                src={"https://i.pravatar.cc/150?u=" + user.id}
                 alt=""
                 className="h-8 w-8 rounded-full object-cover flex-shrink-0 bg-muted"
-                onError={(e) => { (e.target as HTMLImageElement).src = "https://i.pravatar.cc/150?u=" + user.id; }}
               />
               <div className="flex-1 relative">
                 <input
