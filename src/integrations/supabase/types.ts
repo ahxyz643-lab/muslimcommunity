@@ -855,6 +855,29 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      get_personalized_feed: {
+        Args: {
+          _limit?: number
+          _offset?: number
+          _user_id: string
+          _videos_only?: boolean
+        }
+        Returns: {
+          comments_count: number
+          content: string
+          created_at: string
+          id: string
+          image_url: string
+          kind: string
+          likes_count: number
+          reposts_count: number
+          saves_count: number
+          score: number
+          telegram_file_id: string
+          user_id: string
+          video_url: string
+        }[]
+      }
       has_role: {
         Args: {
           _role: Database["public"]["Enums"]["app_role"]
