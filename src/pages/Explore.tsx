@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Search, TrendingUp, Loader2, UserPlus, UserCheck } from "lucide-react";
+import { Search, TrendingUp, Loader2, UserPlus, UserCheck, Briefcase, HandHeart } from "lucide-react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
@@ -15,6 +15,7 @@ const trendingTopics = [
 
 const Explore = () => {
   const [query, setQuery] = useState("");
+  const [tab, setTab] = useState<"posts" | "jobs" | "donations">("posts");
   const { user } = useAuth();
   const queryClient = useQueryClient();
   const navigate = useNavigate();
@@ -56,6 +57,17 @@ const Explore = () => {
     queryClient.invalidateQueries({ queryKey: ["following-ids"] });
   };
 
+  const { data: exJobs = [] } = useQuery({
+    queryKey: ["explore-jobs"],
+    queryFn: async () => (await supabase.from("jobs").select("*").eq("status", "approved").order("created_at", { ascending: false }).limit(20)).data || [],
+    enabled: tab === "jobs",
+  });
+  const { data: exDonations = [] } = useQuery({
+    queryKey: ["explore-donations"],
+    queryFn: async () => (await supabase.from("donations").select("*").eq("status", "approved").order("created_at", { ascending: false }).limit(20)).data || [],
+    enabled: tab === "donations",
+  });
+
   return (
     <div className="pb-20 pt-4">
       <div className="px-4 pb-4">
@@ -64,6 +76,44 @@ const Explore = () => {
           <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search Muslim Community..." className="w-full bg-transparent text-sm text-foreground placeholder:text-muted-foreground focus:outline-none" />
         </div>
       </div>
+
+      <div className="mb-3 flex gap-2 px-4">
+        {[
+          { id: "posts", label: "Posts", icon: TrendingUp },
+          { id: "jobs", label: "Jobs", icon: Briefcase },
+          { id: "donations", label: "Donate", icon: HandHeart },
+        ].map((t) => (
+          <button key={t.id} onClick={() => setTab(t.id as any)}
+            className={`flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold ${tab === t.id ? "bg-primary text-primary-foreground" : "bg-secondary text-muted-foreground"}`}>
+            <t.icon className="h-3.5 w-3.5" />{t.label}
+          </button>
+        ))}
+      </div>
+
+      {tab === "jobs" && (
+        <div className="space-y-2 px-3">
+          {exJobs.map((j: any) => (
+            <button key={j.id} onClick={() => navigate("/jobs")} className="block w-full rounded-xl border border-border bg-card p-3 text-left">
+              <p className="text-sm font-semibold">{j.title}</p>
+              <p className="text-xs text-muted-foreground">{j.company || "—"} · {j.location || "Remote"}</p>
+            </button>
+          ))}
+          {!exJobs.length && <p className="py-8 text-center text-xs text-muted-foreground">No approved jobs</p>}
+        </div>
+      )}
+      {tab === "donations" && (
+        <div className="space-y-2 px-3">
+          {exDonations.map((d: any) => (
+            <button key={d.id} onClick={() => navigate("/donations")} className="block w-full rounded-xl border border-border bg-card p-3 text-left">
+              <p className="text-sm font-semibold">{d.title}</p>
+              <p className="text-xs text-muted-foreground capitalize">{d.kind}{d.amount ? ` · ${d.currency} ${d.amount}` : ""}</p>
+            </button>
+          ))}
+          {!exDonations.length && <p className="py-8 text-center text-xs text-muted-foreground">No approved causes</p>}
+        </div>
+      )}
+
+      {tab === "posts" && <>
 
       <div className="px-4 pb-4">
         <div className="mb-3 flex items-center gap-2">
@@ -122,6 +172,7 @@ const Explore = () => {
           <div className="divide-y divide-border">{posts.map((post) => <PostCard key={post.id} post={post} />)}</div>
         )}
       </div>
+      </>}
     </div>
   );
 };

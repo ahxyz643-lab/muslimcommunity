@@ -22,6 +22,8 @@ import Welcome from "@/pages/Welcome";
 import UserProfilePage from "@/pages/UserProfilePage";
 import Reels from "@/pages/Reels";
 import CreateReel from "@/pages/CreateReel";
+import Jobs from "@/pages/Jobs";
+import Donations from "@/pages/Donations";
 import NotFound from "@/pages/NotFound";
 import AdminLayout from "@/components/admin/AdminLayout";
 import AdminDashboard from "@/pages/admin/AdminDashboard";
@@ -96,6 +98,8 @@ const AppRoutes = () => {
         </Route>
         <Route path="/reels" element={<ProtectedRoute><Reels /></ProtectedRoute>} />
         <Route path="/reels/create" element={<ProtectedRoute><CreateReel /></ProtectedRoute>} />
+        <Route path="/jobs" element={<ProtectedRoute><Jobs /></ProtectedRoute>} />
+        <Route path="/donations" element={<ProtectedRoute><Donations /></ProtectedRoute>} />
         <Route path="*" element={<NotFound />} />
       </Routes>
       {user && !onAdmin && <BottomNav />}

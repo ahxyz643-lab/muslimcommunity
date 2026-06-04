@@ -1,4 +1,4 @@
-import { Bell, PlusSquare } from "lucide-react";
+import { Bell, MessageCircle, Clapperboard } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { useQuery } from "@tanstack/react-query";
@@ -31,11 +31,18 @@ const TopBar = () => {
         </h1>
         <div className="flex items-center gap-1">
           <button
-            onClick={() => navigate("/create")}
+            onClick={() => navigate("/reels")}
             className="rounded-full p-2 text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
-            aria-label="Create post"
+            aria-label="Reels"
           >
-            <PlusSquare className="h-5 w-5" />
+            <Clapperboard className="h-5 w-5" />
+          </button>
+          <button
+            onClick={() => navigate("/messages")}
+            className="rounded-full p-2 text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
+            aria-label="Messages"
+          >
+            <MessageCircle className="h-5 w-5" />
           </button>
           <button
             onClick={() => navigate("/activity")}

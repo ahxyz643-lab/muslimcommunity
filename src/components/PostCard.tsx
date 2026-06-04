@@ -190,17 +190,25 @@ const PostCard = ({ post, onDelete }: { post: PostWithProfile; onDelete?: (id: s
 
         {(post.video_url || post.telegram_file_id) && (
           <div className="relative px-4 pb-3">
-            <video ref={videoRef} src={getVideoSrc(post)} className="w-full rounded-xl object-cover" style={{ maxHeight: 400 }} onEnded={() => setIsPlaying(false)} playsInline />
-            {!isPlaying && (
-              <button onClick={toggleVideo} className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 flex h-14 w-14 items-center justify-center rounded-full bg-primary/80 text-primary-foreground shadow-glow">
+            <button
+              type="button"
+              onClick={() => navigate(`/reels?start=${post.id}&kind=post`)}
+              className="block w-full"
+              aria-label="Open in Reels"
+            >
+              <video
+                ref={videoRef}
+                src={getVideoSrc(post)}
+                className="w-full rounded-xl object-cover pointer-events-none"
+                style={{ maxHeight: 400 }}
+                muted
+                playsInline
+                preload="metadata"
+              />
+              <span className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 flex h-14 w-14 items-center justify-center rounded-full bg-primary/80 text-primary-foreground shadow-glow">
                 <Play className="h-6 w-6 ml-0.5" />
-              </button>
-            )}
-            {isPlaying && (
-              <button onClick={toggleVideo} className="absolute inset-4 bottom-6 flex items-center justify-center rounded-xl bg-background/30 opacity-0 transition-opacity hover:opacity-100">
-                <Pause className="h-10 w-10 text-foreground" />
-              </button>
-            )}
+              </span>
+            </button>
           </div>
         )}
 

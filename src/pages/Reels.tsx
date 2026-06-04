@@ -1,5 +1,5 @@
 import { useEffect, useState, useRef, useCallback } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { Heart, MessageCircle, Share2, Music, Volume2, VolumeX, Plus, ArrowLeft, Loader2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
@@ -10,16 +10,17 @@ import { getVideoSrc } from "@/lib/video";
 
 interface Reel {
   id: string;
+  kind: "post" | "reel";
   user_id: string;
-  video_url: string;
+  video_url: string | null;
   telegram_file_id?: string | null;
   caption: string | null;
-  music_name: string | null;
-  filter: string | null;
-  text_overlay: string | null;
+  music_name?: string | null;
+  filter?: string | null;
+  text_overlay?: string | null;
   likes_count: number;
   comments_count: number;
-  views_count: number;
+  views_count?: number;
   created_at: string;
   profile?: {
     username: string | null;
@@ -153,29 +154,80 @@ const Reels = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
   const { toast } = useToast();
+  const [params] = useSearchParams();
+  const startId = params.get("start");
   const [reels, setReels] = useState<Reel[]>([]);
   const [loading, setLoading] = useState(true);
   const [activeIdx, setActiveIdx] = useState(0);
   const [muted, setMuted] = useState(true);
   const [commentReelId, setCommentReelId] = useState<string | null>(null);
+  const [commentKind, setCommentKind] = useState<"post" | "reel">("reel");
   const containerRef = useRef<HTMLDivElement>(null);
 
   const loadReels = useCallback(async () => {
-    const { data: reelsData } = await supabase.from("reels").select("*").order("created_at", { ascending: false }).limit(50);
-    if (!reelsData) { setLoading(false); return; }
-    const userIds = [...new Set(reelsData.map((r) => r.user_id))];
+    let merged: any[] = [];
+    if (user) {
+      const { data } = await supabase.rpc("get_personalized_feed", {
+        _user_id: user.id, _limit: 80, _offset: 0, _videos_only: true,
+      });
+      merged = data || [];
+    }
+    // Fallback: query reels table directly
+    if (!merged.length) {
+      const { data } = await supabase.from("reels").select("*").order("created_at", { ascending: false }).limit(50);
+      merged = (data || []).map((r: any) => ({ ...r, kind: "reel", content: r.caption }));
+    }
+    // Fetch reel-specific extras (music/filter/text_overlay) for kind=reel rows
+    const reelIds = merged.filter((m) => m.kind === "reel").map((m) => m.id);
+    let reelExtras = new Map<string, any>();
+    if (reelIds.length) {
+      const { data: rx } = await supabase.from("reels").select("id, music_name, filter, text_overlay, views_count").in("id", reelIds);
+      reelExtras = new Map((rx || []).map((r: any) => [r.id, r]));
+    }
+    const userIds = [...new Set(merged.map((m: any) => m.user_id))];
     const { data: profiles } = await supabase.from("profiles").select("user_id, username, display_name, avatar_url, verified").in("user_id", userIds);
     const profileMap = new Map(profiles?.map((p) => [p.user_id, p]) || []);
-
-    let likedSet = new Set<string>();
+    let likedReels = new Set<string>(), likedPosts = new Set<string>();
     if (user) {
-      const { data: likes } = await supabase.from("reel_likes").select("reel_id").eq("user_id", user.id).in("reel_id", reelsData.map((r) => r.id));
-      likedSet = new Set(likes?.map((l) => l.reel_id) || []);
+      const reelIds2 = merged.filter((m) => m.kind === "reel").map((m) => m.id);
+      const postIds2 = merged.filter((m) => m.kind === "post").map((m) => m.id);
+      if (reelIds2.length) {
+        const { data } = await supabase.from("reel_likes").select("reel_id").eq("user_id", user.id).in("reel_id", reelIds2);
+        likedReels = new Set((data || []).map((l: any) => l.reel_id));
+      }
+      if (postIds2.length) {
+        const { data } = await supabase.from("likes").select("post_id").eq("user_id", user.id).in("post_id", postIds2);
+        likedPosts = new Set((data || []).map((l: any) => l.post_id));
+      }
     }
-
-    setReels(reelsData.map((r) => ({ ...r, profile: profileMap.get(r.user_id) as any, liked: likedSet.has(r.id) })));
+    let items: Reel[] = merged.map((m: any) => {
+      const extra = reelExtras.get(m.id) || {};
+      return {
+        id: m.id,
+        kind: m.kind,
+        user_id: m.user_id,
+        video_url: m.video_url,
+        telegram_file_id: m.telegram_file_id,
+        caption: m.content || m.caption || null,
+        music_name: extra.music_name || null,
+        filter: extra.filter || null,
+        text_overlay: extra.text_overlay || null,
+        likes_count: m.likes_count || 0,
+        comments_count: m.comments_count || 0,
+        views_count: extra.views_count || 0,
+        created_at: m.created_at,
+        profile: profileMap.get(m.user_id) as any,
+        liked: m.kind === "reel" ? likedReels.has(m.id) : likedPosts.has(m.id),
+      };
+    });
+    // If startId given, hoist it to front
+    if (startId) {
+      const idx = items.findIndex((i) => i.id === startId);
+      if (idx > 0) items = [items[idx], ...items.slice(0, idx), ...items.slice(idx + 1)];
+    }
+    setReels(items);
     setLoading(false);
-  }, [user]);
+  }, [user, startId]);
 
   useEffect(() => { loadReels(); }, [loadReels]);
 
@@ -200,14 +252,14 @@ const Reels = () => {
 
   const handleLike = async (reel: Reel) => {
     if (!user) { navigate("/auth"); return; }
+    const likeTbl = reel.kind === "reel" ? "reel_likes" : "likes";
+    const idCol = reel.kind === "reel" ? "reel_id" : "post_id";
     if (reel.liked) {
-      await supabase.from("reel_likes").delete().eq("user_id", user.id).eq("reel_id", reel.id);
-      await supabase.from("reels").update({ likes_count: Math.max(0, reel.likes_count - 1) }).eq("id", reel.id);
+      await supabase.from(likeTbl as any).delete().eq("user_id", user.id).eq(idCol, reel.id);
       setReels((prev) => prev.map((r) => r.id === reel.id ? { ...r, liked: false, likes_count: Math.max(0, r.likes_count - 1) } : r));
     } else {
-      const { error } = await supabase.from("reel_likes").insert({ user_id: user.id, reel_id: reel.id });
+      const { error } = await supabase.from(likeTbl as any).insert({ user_id: user.id, [idCol]: reel.id });
       if (error) return;
-      await supabase.from("reels").update({ likes_count: reel.likes_count + 1 }).eq("id", reel.id);
       setReels((prev) => prev.map((r) => r.id === reel.id ? { ...r, liked: true, likes_count: r.likes_count + 1 } : r));
     }
   };
@@ -220,6 +272,7 @@ const Reels = () => {
   };
 
   const handleView = async (reel: Reel) => {
+    if (reel.kind !== "reel") return;
     await supabase.from("reels").update({ views_count: reel.views_count + 1 }).eq("id", reel.id);
     setReels((prev) => prev.map((r) => r.id === reel.id ? { ...r, views_count: r.views_count + 1 } : r));
   };
@@ -267,7 +320,7 @@ const Reels = () => {
                 reel={reel}
                 isActive={idx === activeIdx}
                 onLike={() => handleLike(reel)}
-                onComment={() => setCommentReelId(reel.id)}
+                onComment={() => { setCommentReelId(reel.id); setCommentKind(reel.kind); }}
                 onShare={() => handleShare(reel)}
                 muted={muted}
                 onToggleMute={() => setMuted((m) => !m)}
@@ -280,8 +333,9 @@ const Reels = () => {
 
       {commentReelId && (
         <CommentsSheet
-          type="reel"
-          reelId={commentReelId}
+          type={commentKind}
+          reelId={commentKind === "reel" ? commentReelId : undefined as any}
+          postId={commentKind === "post" ? commentReelId : undefined as any}
           onClose={() => setCommentReelId(null)}
           onCountChange={(d) => setReels((prev) => prev.map((r) => r.id === commentReelId ? { ...r, comments_count: Math.max(0, r.comments_count + d) } : r))}
         />
