@@ -1,11 +1,12 @@
-import { Home, Compass, Clapperboard, MessageCircle, User } from "lucide-react";
+import { Home, Compass, Briefcase, HandHeart, User, Plus } from "lucide-react";
 import { useLocation, useNavigate } from "react-router-dom";
 
 const navItems = [
   { icon: Home, label: "Home", path: "/" },
   { icon: Compass, label: "Explore", path: "/explore" },
-  { icon: Clapperboard, label: "Reels", path: "/reels" },
-  { icon: MessageCircle, label: "Messages", path: "/messages" },
+  { icon: Plus, label: "Create", path: "/create" },
+  { icon: Briefcase, label: "Jobs", path: "/jobs" },
+  { icon: HandHeart, label: "Donate", path: "/donations" },
   { icon: User, label: "Profile", path: "/profile" },
 ];
 
