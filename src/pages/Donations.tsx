@@ -87,8 +87,8 @@ export default function Donations() {
       )}
 
       {open && (
-        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/60" onClick={() => setOpen(false)}>
-          <div className="w-full max-w-lg rounded-t-3xl bg-card p-5" onClick={(e) => e.stopPropagation()}>
+        <div className="fixed inset-0 z-[80] flex items-end justify-center bg-black/60" onClick={() => setOpen(false)}>
+          <div className="w-full max-w-lg rounded-t-3xl bg-card p-5 max-h-[90vh] overflow-y-auto pb-[calc(env(safe-area-inset-bottom)+1.25rem)]" onClick={(e) => e.stopPropagation()}>
             <div className="mb-3 flex items-center justify-between">
               <h2 className="text-base font-bold">Request Donation</h2>
               <button onClick={() => setOpen(false)}><X className="h-5 w-5" /></button>

@@ -260,7 +260,7 @@ const CallScreen = ({
     `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
 
   return (
-    <div className="fixed inset-0 z-50 flex flex-col bg-background">
+    <div className="fixed inset-0 z-[100] flex flex-col bg-background">
       {/* Video areas */}
       {isVideoCall ? (
         <div className="relative flex-1 bg-black">
@@ -330,7 +330,10 @@ const CallScreen = ({
       )}
 
       {/* Controls */}
-      <div className="flex items-center justify-center gap-6 py-8 bg-background/80 backdrop-blur-sm">
+      <div
+        className="flex items-center justify-center gap-6 bg-background/80 backdrop-blur-sm pt-6"
+        style={{ paddingBottom: "calc(env(safe-area-inset-bottom) + 2rem)" }}
+      >
         {callState === "ringing" && isIncoming ? (
           <>
             {/* Accept / Decline */}
