@@ -4,6 +4,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useEffect } from "react";
+import appLogo from "@/assets/app-logo.png";
 
 const TopBar = () => {
   const navigate = useNavigate();
@@ -46,10 +47,13 @@ const TopBar = () => {
   return (
     <header className="fixed left-0 right-0 top-0 z-50 border-b border-border bg-card/90 backdrop-blur-xl">
       <div className="mx-auto flex max-w-lg items-center justify-between px-4 py-3">
-        <h1 className="font-display text-xl font-bold">
-          <span className="text-emerald-brand">Muslim</span>
-          <span className="text-gold">Community</span>
-        </h1>
+        <button onClick={() => navigate("/")} className="flex items-center gap-2">
+          <img src={appLogo} alt="Logo" className="h-8 w-8 rounded-lg" />
+          <h1 className="font-display text-xl font-bold">
+            <span className="text-emerald-brand">Muslim</span>
+            <span className="text-gold">Community</span>
+          </h1>
+        </button>
         <div className="flex items-center gap-1">
           <button
             onClick={() => navigate("/reels")}
