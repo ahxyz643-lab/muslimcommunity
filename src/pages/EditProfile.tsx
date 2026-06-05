@@ -80,7 +80,8 @@ const EditProfile = () => {
       toast({ title: "Profile updated! ✨" });
       navigate("/profile");
     } catch (err: any) {
-      toast({ title: "Error", description: err.message, variant: "destructive" });
+      console.error("[EditProfile]", err);
+      toast({ title: "Error", description: (await import("@/lib/errors")).getUserFriendlyError(err), variant: "destructive" });
     } finally {
       setSaving(false);
     }

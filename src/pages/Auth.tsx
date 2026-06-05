@@ -43,9 +43,10 @@ const Auth = () => {
         });
       }
     } catch (error: any) {
+      console.error("[Auth]", error);
       toast({
         title: "Error",
-        description: error.message,
+        description: (await import("@/lib/errors")).getUserFriendlyError(error),
         variant: "destructive",
       });
     } finally {

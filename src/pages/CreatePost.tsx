@@ -99,7 +99,8 @@ const CreatePost = () => {
       toast({ title: "Post shared! ✨" });
       navigate("/");
     } catch (err: any) {
-      toast({ title: "Error", description: err.message, variant: "destructive" });
+      console.error("[CreatePost]", err);
+      toast({ title: "Error", description: (await import("@/lib/errors")).getUserFriendlyError(err), variant: "destructive" });
     } finally {
       setPosting(false);
     }
