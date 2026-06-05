@@ -1,12 +1,14 @@
 import { Bell, MessageCircle, Clapperboard } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { useEffect } from "react";
 
 const TopBar = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
+  const qc = useQueryClient();
 
   const { data: unreadCount = 0 } = useQuery({
     queryKey: ["unread-notifications", user?.id],
@@ -21,6 +23,25 @@ const TopBar = () => {
     enabled: !!user,
     refetchInterval: 30000,
   });
+
+  // Realtime unread badge
+  useEffect(() => {
+    if (!user) return;
+    const ch = supabase
+      .channel(`topbar-notif-${user.id}`)
+      .on(
+        "postgres_changes",
+        { event: "INSERT", schema: "public", table: "notifications", filter: `user_id=eq.${user.id}` },
+        () => qc.invalidateQueries({ queryKey: ["unread-notifications", user.id] })
+      )
+      .on(
+        "postgres_changes",
+        { event: "UPDATE", schema: "public", table: "notifications", filter: `user_id=eq.${user.id}` },
+        () => qc.invalidateQueries({ queryKey: ["unread-notifications", user.id] })
+      )
+      .subscribe();
+    return () => { supabase.removeChannel(ch); };
+  }, [user?.id, qc]);
 
   return (
     <header className="fixed left-0 right-0 top-0 z-50 border-b border-border bg-card/90 backdrop-blur-xl">
