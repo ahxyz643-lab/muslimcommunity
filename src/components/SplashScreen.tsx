@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import appLogo from "@/assets/app-logo.png";
 
 const SplashScreen = ({ onFinish }: { onFinish: () => void }) => {
   const [fadeOut, setFadeOut] = useState(false);
@@ -20,8 +21,8 @@ const SplashScreen = ({ onFinish }: { onFinish: () => void }) => {
         <div className="absolute inset-2 animate-spin rounded-full border-4 border-transparent border-b-primary border-l-accent" style={{ animationDuration: "3.5s", animationDirection: "reverse" }} />
 
         {/* Inner glowing logo */}
-        <div className="relative flex h-16 w-16 items-center justify-center rounded-full gradient-primary shadow-glow">
-          <span className="font-display text-2xl font-bold text-primary-foreground">MC</span>
+        <div className="relative flex h-16 w-16 items-center justify-center rounded-2xl overflow-hidden shadow-glow">
+          <img src={appLogo} alt="Muslim Community" className="h-full w-full object-cover" />
         </div>
       </div>
 
