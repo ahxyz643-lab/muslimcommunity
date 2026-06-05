@@ -1,13 +1,15 @@
 import { ArrowLeft, Heart, MessageCircle, UserPlus, Bookmark, Loader2 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { formatDistanceToNow } from "date-fns";
+import { useEffect } from "react";
 
 const Activity = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
+  const qc = useQueryClient();
 
   const { data: notifications = [], isLoading } = useQuery({
     queryKey: ["notifications", user?.id],
@@ -22,6 +24,33 @@ const Activity = () => {
     },
     enabled: !!user,
   });
+
+  // Realtime: live-prepend incoming notifications
+  useEffect(() => {
+    if (!user) return;
+    const channel = supabase
+      .channel(`notif-${user.id}`)
+      .on(
+        "postgres_changes",
+        { event: "INSERT", schema: "public", table: "notifications", filter: `user_id=eq.${user.id}` },
+        (payload) => {
+          qc.setQueryData(["notifications", user.id], (old: any[] = []) => [payload.new, ...old]);
+          qc.invalidateQueries({ queryKey: ["unread-notifications", user.id] });
+          if ("Notification" in window && Notification.permission === "granted") {
+            try { new Notification((payload.new as any).title || "New activity", { body: (payload.new as any).body || "" }); } catch {}
+          }
+        }
+      )
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
+  }, [user?.id, qc]);
+
+  // Request browser notification permission once
+  useEffect(() => {
+    if ("Notification" in window && Notification.permission === "default") {
+      Notification.requestPermission().catch(() => {});
+    }
+  }, []);
 
   // Mark all as read
   useQuery({
