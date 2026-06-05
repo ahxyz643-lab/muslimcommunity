@@ -8,29 +8,6 @@ const corsHeaders = {
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
 
-  // Require an authenticated caller (JWT) to prevent anonymous abuse of the proxy
-  const authHeader = req.headers.get("Authorization") || req.headers.get("authorization");
-  if (!authHeader?.toLowerCase().startsWith("bearer ")) {
-    return new Response(JSON.stringify({ error: "Unauthorized" }), {
-      status: 401,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
-  }
-  try {
-    const token = authHeader.split(" ")[1];
-    const parts = token.split(".");
-    if (parts.length !== 3) throw new Error("bad token");
-    const payload = JSON.parse(atob(parts[1].replace(/-/g, "+").replace(/_/g, "/")));
-    if (!payload?.sub || (payload.exp && payload.exp * 1000 < Date.now())) {
-      throw new Error("expired");
-    }
-  } catch {
-    return new Response(JSON.stringify({ error: "Unauthorized" }), {
-      status: 401,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
-  }
-
   const url = new URL(req.url);
   const raw = url.searchParams.get("file_id");
   if (!raw) return new Response("Missing file_id", { status: 400, headers: corsHeaders });
