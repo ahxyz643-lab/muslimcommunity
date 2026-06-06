@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from "react";
-import { Search, Edit, ArrowLeft, Send, Loader2, Check, CheckCheck, ImagePlus, X, Mic, Square, Trash2, Phone, PhoneOff, Video } from "lucide-react";
-import CallScreen from "@/components/CallScreen";
+import { Search, Edit, ArrowLeft, Send, Loader2, Check, CheckCheck, ImagePlus, X, Mic, Square, Trash2, Phone, Video } from "lucide-react";
+import { useCall } from "@/contexts/CallContext";
 import { useAuth } from "@/contexts/AuthContext";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
@@ -93,6 +93,7 @@ const VoicePlayer = ({ url }: { url: string }) => {
 const Messages = () => {
   const { user } = useAuth();
   const queryClient = useQueryClient();
+  const { startCall } = useCall();
   const [activeConvo, setActiveConvo] = useState<Conversation | null>(null);
   const [newMessage, setNewMessage] = useState("");
   const [showNewChat, setShowNewChat] = useState(false);
@@ -110,10 +111,6 @@ const Messages = () => {
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
-
-  // Calling state
-  const [activeCall, setActiveCall] = useState<{ isVideo: boolean; isIncoming: boolean } | null>(null);
-  const [incomingCall, setIncomingCall] = useState<{ conversationId: string; callerId: string; isVideo: boolean } | null>(null);
 
   // Update last_seen periodically
   useEffect(() => {
@@ -187,33 +184,6 @@ const Messages = () => {
     },
     enabled: !!user,
   });
-
-  // Listen for incoming calls across all conversations
-  useEffect(() => {
-    if (!user || conversations.length === 0) return;
-    const channels: ReturnType<typeof supabase.channel>[] = [];
-
-    conversations.forEach((convo) => {
-      const ch = supabase
-        .channel(`call-${convo.id}`, { config: { broadcast: { self: false } } })
-        .on("broadcast", { event: "call-signal" }, ({ payload }) => {
-          if (payload.type === "ring" && payload.from !== user.id && !activeCall && !incomingCall) {
-            setIncomingCall({
-              conversationId: convo.id,
-              callerId: payload.from,
-              isVideo: payload.isVideo,
-            });
-          }
-        })
-        .subscribe();
-      channels.push(ch);
-    });
-
-    return () => {
-      channels.forEach((ch) => supabase.removeChannel(ch));
-    };
-  }, [user?.id, conversations, activeCall, incomingCall]);
-
 
   const { data: fetchedMessages = [] } = useQuery({
     queryKey: ["messages", activeConvo?.id],
@@ -446,75 +416,10 @@ const Messages = () => {
     queryClient.invalidateQueries({ queryKey: ["conversations"] });
   };
 
-  // Handle incoming call accept
-  const acceptIncomingCall = () => {
-    if (!incomingCall) return;
-    const convo = conversations.find((c) => c.id === incomingCall.conversationId);
-    if (convo) {
-      setActiveConvo(convo);
-      setActiveCall({ isVideo: incomingCall.isVideo, isIncoming: true });
-    }
-    setIncomingCall(null);
-  };
-
-  const declineIncomingCall = () => {
-    if (!incomingCall) return;
-    const ch = supabase.channel(`call-${incomingCall.conversationId}`, { config: { broadcast: { self: false } } });
-    ch.subscribe((status) => {
-      if (status === "SUBSCRIBED") {
-        ch.send({ type: "broadcast", event: "call-signal", payload: { type: "end", from: user?.id } });
-        setTimeout(() => supabase.removeChannel(ch), 500);
-      }
-    });
-    setIncomingCall(null);
-  };
-
-  // Active call screen
-  if (activeCall && activeConvo) {
-    return (
-      <CallScreen
-        conversationId={activeConvo.id}
-        otherUser={activeConvo.otherUser}
-        currentUserId={user!.id}
-        isVideoCall={activeCall.isVideo}
-        isIncoming={activeCall.isIncoming}
-        onEnd={() => setActiveCall(null)}
-      />
-    );
-  }
-
-  // Incoming call overlay
-  const incomingCallOverlay = incomingCall && (
-    <div className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-background/95 backdrop-blur-sm">
-      <div className="animate-pulse mb-6">
-        <img
-          src={conversations.find((c) => c.id === incomingCall.conversationId)?.otherUser.avatar_url || "https://i.pravatar.cc/150"}
-          alt=""
-          className="h-24 w-24 rounded-full object-cover border-4 border-primary"
-        />
-      </div>
-      <h2 className="text-xl font-bold text-foreground">
-        {conversations.find((c) => c.id === incomingCall.conversationId)?.otherUser.display_name || "Someone"}
-      </h2>
-      <p className="mt-2 text-sm text-muted-foreground">
-        Incoming {incomingCall.isVideo ? "video" : "voice"} call...
-      </p>
-      <div className="mt-8 flex gap-8">
-        <button onClick={declineIncomingCall} className="flex h-16 w-16 items-center justify-center rounded-full bg-destructive text-white shadow-lg">
-          <PhoneOff className="h-7 w-7" />
-        </button>
-        <button onClick={acceptIncomingCall} className="flex h-16 w-16 items-center justify-center rounded-full bg-green-500 text-white shadow-lg animate-pulse">
-          <Phone className="h-7 w-7" />
-        </button>
-      </div>
-    </div>
-  );
-
   // Chat view
   if (activeConvo) {
     return (
       <div className="flex min-h-screen flex-col pb-20">
-        {incomingCallOverlay}
         {/* Header */}
         <div className="flex items-center gap-3 border-b border-border px-4 py-3">
           <button onClick={() => { setActiveConvo(null); setRealtimeMessages([]); clearImage(); clearVoice(); }} className="text-muted-foreground hover:text-foreground">
@@ -532,13 +437,13 @@ const Messages = () => {
           </div>
           {/* Call buttons */}
           <button
-            onClick={() => setActiveCall({ isVideo: false, isIncoming: false })}
+            onClick={() => startCall(activeConvo.id, activeConvo.otherUser, false)}
             className="rounded-full p-2 text-muted-foreground hover:bg-secondary hover:text-foreground"
           >
             <Phone className="h-5 w-5" />
           </button>
           <button
-            onClick={() => setActiveCall({ isVideo: true, isIncoming: false })}
+            onClick={() => startCall(activeConvo.id, activeConvo.otherUser, true)}
             className="rounded-full p-2 text-muted-foreground hover:bg-secondary hover:text-foreground"
           >
             <Video className="h-5 w-5" />
@@ -676,7 +581,6 @@ const Messages = () => {
   if (showNewChat) {
     return (
       <div className="pb-20">
-        {incomingCallOverlay}
         <div className="flex items-center gap-3 border-b border-border px-4 py-3">
           <button onClick={() => { setShowNewChat(false); setSearchQuery(""); }} className="text-muted-foreground hover:text-foreground">
             <ArrowLeft className="h-6 w-6" />
@@ -718,7 +622,6 @@ const Messages = () => {
   // Conversations list
   return (
     <div className="pb-20">
-      {incomingCallOverlay}
       <div className="flex items-center justify-between border-b border-border px-4 py-3">
         <h1 className="font-display text-xl font-bold text-foreground">Messages</h1>
         <button onClick={() => setShowNewChat(true)} className="rounded-full p-2 text-muted-foreground hover:bg-secondary hover:text-foreground">
