@@ -49,10 +49,85 @@ const CallScreen = ({
 
   const channelName = `call-${conversationId}`;
 
+  // Ringtone via WebAudio (no asset needed)
+  const ringAudioRef = useRef<{ ctx: AudioContext; stop: () => void } | null>(null);
+  const startRingtone = useCallback((incoming: boolean) => {
+    if (ringAudioRef.current) return;
+    try {
+      const Ctx = (window.AudioContext || (window as any).webkitAudioContext);
+      if (!Ctx) return;
+      const ctx = new Ctx();
+      const master = ctx.createGain();
+      master.gain.value = 0.0001;
+      master.connect(ctx.destination);
+
+      let stopped = false;
+      const playBeep = (freq: number, dur: number, when: number) => {
+        const osc = ctx.createOscillator();
+        const g = ctx.createGain();
+        osc.type = "sine";
+        osc.frequency.value = freq;
+        g.gain.setValueAtTime(0.0001, when);
+        g.gain.exponentialRampToValueAtTime(0.25, when + 0.02);
+        g.gain.exponentialRampToValueAtTime(0.0001, when + dur);
+        osc.connect(g).connect(master);
+        osc.start(when);
+        osc.stop(when + dur + 0.05);
+      };
+
+      const schedule = () => {
+        if (stopped) return;
+        const t = ctx.currentTime;
+        if (incoming) {
+          // Phone-style ring: two beeps then pause
+          playBeep(440, 0.4, t);
+          playBeep(480, 0.4, t + 0.5);
+          playBeep(440, 0.4, t + 1.2);
+          playBeep(480, 0.4, t + 1.7);
+        } else {
+          // Outgoing ringback tone
+          playBeep(420, 1.0, t);
+          playBeep(420, 1.0, t + 2.0);
+        }
+        master.gain.setValueAtTime(1, t);
+      };
+      schedule();
+      const interval = setInterval(schedule, incoming ? 3000 : 4000);
+
+      ringAudioRef.current = {
+        ctx,
+        stop: () => {
+          stopped = true;
+          clearInterval(interval);
+          try { master.disconnect(); } catch {}
+          try { ctx.close(); } catch {}
+        },
+      };
+    } catch (e) {
+      console.warn("Ringtone unavailable", e);
+    }
+  }, []);
+  const stopRingtone = useCallback(() => {
+    ringAudioRef.current?.stop();
+    ringAudioRef.current = null;
+  }, []);
+
+  // Play/stop ringtone based on call state
+  useEffect(() => {
+    if (callState === "ringing") {
+      startRingtone(isIncoming);
+    } else {
+      stopRingtone();
+    }
+    return () => stopRingtone();
+  }, [callState, isIncoming, startRingtone, stopRingtone]);
+
   const cleanup = useCallback(() => {
     if (endedRef.current) return;
     endedRef.current = true;
     if (timerRef.current) clearInterval(timerRef.current);
+    ringAudioRef.current?.stop();
+    ringAudioRef.current = null;
     localStreamRef.current?.getTracks().forEach((t) => t.stop());
     pcRef.current?.close();
     pcRef.current = null;
