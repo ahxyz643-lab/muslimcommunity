@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from "react";
-import { Phone, PhoneOff, Mic, MicOff, Video, VideoOff, Volume2, VolumeX } from "lucide-react";
+import { Phone, PhoneOff, Mic, MicOff, Video, VideoOff, X } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 
 interface CallScreenProps {
@@ -36,7 +36,6 @@ const CallScreen = ({
   const [callState, setCallState] = useState<CallState>(isIncoming ? "ringing" : "connecting");
   const [isMuted, setIsMuted] = useState(false);
   const [isVideoEnabled, setIsVideoEnabled] = useState(isVideoCall);
-  const [isSpeakerOn, setIsSpeakerOn] = useState(true);
   const [callDuration, setCallDuration] = useState(0);
 
   const pcRef = useRef<RTCPeerConnection | null>(null);
@@ -332,22 +331,6 @@ const CallScreen = ({
     }
   };
 
-  const toggleSpeaker = async () => {
-    const next = !isSpeakerOn;
-    setIsSpeakerOn(next);
-    const el = remoteVideoRef.current as HTMLMediaElement | null;
-    if (el) {
-      el.volume = next ? 1.0 : 0.2;
-      // Try to switch output device (Chrome desktop only)
-      try {
-        const anyEl: any = el;
-        if (typeof anyEl.setSinkId === "function") {
-          await anyEl.setSinkId(next ? "default" : "");
-        }
-      } catch {}
-    }
-  };
-
   const formatTime = (s: number) =>
     `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
 
@@ -449,19 +432,8 @@ const CallScreen = ({
               className={`flex h-14 w-14 items-center justify-center rounded-full transition-colors ${
                 isMuted ? "bg-destructive/20 text-destructive" : "bg-secondary text-foreground"
               }`}
-              aria-label={isMuted ? "Unmute mic" : "Mute mic"}
             >
               {isMuted ? <MicOff className="h-6 w-6" /> : <Mic className="h-6 w-6" />}
-            </button>
-
-            <button
-              onClick={toggleSpeaker}
-              className={`flex h-14 w-14 items-center justify-center rounded-full transition-colors ${
-                !isSpeakerOn ? "bg-destructive/20 text-destructive" : "bg-secondary text-foreground"
-              }`}
-              aria-label={isSpeakerOn ? "Speaker off" : "Speaker on"}
-            >
-              {isSpeakerOn ? <Volume2 className="h-6 w-6" /> : <VolumeX className="h-6 w-6" />}
             </button>
 
             {isVideoCall && (
