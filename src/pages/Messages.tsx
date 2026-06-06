@@ -581,7 +581,6 @@ const Messages = () => {
   if (showNewChat) {
     return (
       <div className="pb-20">
-        {incomingCallOverlay}
         <div className="flex items-center gap-3 border-b border-border px-4 py-3">
           <button onClick={() => { setShowNewChat(false); setSearchQuery(""); }} className="text-muted-foreground hover:text-foreground">
             <ArrowLeft className="h-6 w-6" />
@@ -623,7 +622,6 @@ const Messages = () => {
   // Conversations list
   return (
     <div className="pb-20">
-      {incomingCallOverlay}
       <div className="flex items-center justify-between border-b border-border px-4 py-3">
         <h1 className="font-display text-xl font-bold text-foreground">Messages</h1>
         <button onClick={() => setShowNewChat(true)} className="rounded-full p-2 text-muted-foreground hover:bg-secondary hover:text-foreground">
