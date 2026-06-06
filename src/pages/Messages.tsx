@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from "react";
-import { Search, Edit, ArrowLeft, Send, Loader2, Check, CheckCheck, ImagePlus, X, Mic, Square, Trash2, Phone, PhoneOff, Video } from "lucide-react";
-import CallScreen from "@/components/CallScreen";
+import { Search, Edit, ArrowLeft, Send, Loader2, Check, CheckCheck, ImagePlus, X, Mic, Square, Trash2, Phone, Video } from "lucide-react";
+import { useCall } from "@/contexts/CallContext";
 import { useAuth } from "@/contexts/AuthContext";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
@@ -93,6 +93,7 @@ const VoicePlayer = ({ url }: { url: string }) => {
 const Messages = () => {
   const { user } = useAuth();
   const queryClient = useQueryClient();
+  const { startCall } = useCall();
   const [activeConvo, setActiveConvo] = useState<Conversation | null>(null);
   const [newMessage, setNewMessage] = useState("");
   const [showNewChat, setShowNewChat] = useState(false);
@@ -110,10 +111,6 @@ const Messages = () => {
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
-
-  // Calling state
-  const [activeCall, setActiveCall] = useState<{ isVideo: boolean; isIncoming: boolean } | null>(null);
-  const [incomingCall, setIncomingCall] = useState<{ conversationId: string; callerId: string; isVideo: boolean } | null>(null);
 
   // Update last_seen periodically
   useEffect(() => {
@@ -187,33 +184,6 @@ const Messages = () => {
     },
     enabled: !!user,
   });
-
-  // Listen for incoming calls across all conversations
-  useEffect(() => {
-    if (!user || conversations.length === 0) return;
-    const channels: ReturnType<typeof supabase.channel>[] = [];
-
-    conversations.forEach((convo) => {
-      const ch = supabase
-        .channel(`call-${convo.id}`, { config: { broadcast: { self: false } } })
-        .on("broadcast", { event: "call-signal" }, ({ payload }) => {
-          if (payload.type === "ring" && payload.from !== user.id && !activeCall && !incomingCall) {
-            setIncomingCall({
-              conversationId: convo.id,
-              callerId: payload.from,
-              isVideo: payload.isVideo,
-            });
-          }
-        })
-        .subscribe();
-      channels.push(ch);
-    });
-
-    return () => {
-      channels.forEach((ch) => supabase.removeChannel(ch));
-    };
-  }, [user?.id, conversations, activeCall, incomingCall]);
-
 
   const { data: fetchedMessages = [] } = useQuery({
     queryKey: ["messages", activeConvo?.id],
