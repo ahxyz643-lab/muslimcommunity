@@ -5,7 +5,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
 import { formatDistanceToNow } from "date-fns";
 import { useNavigate } from "react-router-dom";
-import { friendlyMessage } from "@/lib/errors";
+import { getUserFriendlyError } from "@/lib/errors";
 
 interface Comment {
   id: string;
@@ -96,7 +96,7 @@ const CommentsSheet = ({ postId, reelId, type = "post", onClose, onCountChange }
     const { error } = await supabase.from(tableName as any).insert(payload);
     if (error) {
       console.error("Comment insert failed:", error);
-      toast({ title: "Couldn't post comment", description: friendlyMessage(error), variant: "destructive" });
+      toast({ title: "Couldn't post comment", description: getUserFriendlyError(error), variant: "destructive" });
     } else {
       setNewComment("");
       setReplyTo(null);
