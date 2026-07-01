@@ -4,6 +4,8 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
 import { formatDistanceToNow } from "date-fns";
+import { useNavigate } from "react-router-dom";
+import { friendlyMessage } from "@/lib/errors";
 
 interface Comment {
   id: string;
@@ -24,6 +26,7 @@ type Target = "post" | "reel";
 const CommentsSheet = ({ postId, reelId, type = "post", onClose, onCountChange }: { postId?: string; reelId?: string; type?: Target; onClose: () => void; onCountChange?: (delta: number) => void }) => {
   const { user } = useAuth();
   const { toast } = useToast();
+  const navigate = useNavigate();
   const [comments, setComments] = useState<Comment[]>([]);
   const [newComment, setNewComment] = useState("");
   const [loading, setLoading] = useState(true);
@@ -81,7 +84,8 @@ const CommentsSheet = ({ postId, reelId, type = "post", onClose, onCountChange }
   const totalCount = comments.reduce((acc, c) => acc + 1 + (c.replies?.length || 0), 0);
 
   const handleSend = async () => {
-    if (!user || !newComment.trim() || !targetId) return;
+    if (!user) { navigate("/auth"); return; }
+    if (!newComment.trim() || !targetId) return;
     setSending(true);
     const payload: any = {
       [fkColumn]: targetId,
@@ -91,7 +95,8 @@ const CommentsSheet = ({ postId, reelId, type = "post", onClose, onCountChange }
     if (supportsReplies) payload.parent_id = replyTo?.id ?? null;
     const { error } = await supabase.from(tableName as any).insert(payload);
     if (error) {
-      toast({ title: "Error", description: error.message, variant: "destructive" });
+      console.error("Comment insert failed:", error);
+      toast({ title: "Couldn't post comment", description: friendlyMessage(error), variant: "destructive" });
     } else {
       setNewComment("");
       setReplyTo(null);
@@ -175,9 +180,17 @@ const CommentsSheet = ({ postId, reelId, type = "post", onClose, onCountChange }
           )}
         </div>
 
-        {/* Typing bar */}
-        {user && (
-          <div className="border-t border-border px-4 py-3 bg-card">
+        {/* Typing bar - always visible; prompts login if guest */}
+        <div className="border-t border-border px-4 py-3 bg-card">
+          {!user ? (
+            <button
+              onClick={() => navigate("/auth")}
+              className="w-full rounded-full bg-primary py-2.5 text-sm font-semibold text-primary-foreground"
+            >
+              Sign in to comment
+            </button>
+          ) : (
+            <>
             {replyTo && (
               <div className="flex items-center justify-between px-2 pb-2">
                 <span className="text-[11px] text-muted-foreground">
@@ -213,6 +226,7 @@ const CommentsSheet = ({ postId, reelId, type = "post", onClose, onCountChange }
                   placeholder={replyTo ? `Reply to ${replyTo.profile?.display_name || "User"}...` : "Add a comment..."}
                   className="w-full rounded-full bg-secondary px-4 py-2.5 pr-10 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary/30 transition-all"
                   autoFocus={!!replyTo}
+                  maxLength={500}
                 />
                 {newComment.trim().length > 0 && (
                   <span className="absolute right-12 top-1/2 -translate-y-1/2 text-[10px] text-muted-foreground">
@@ -228,8 +242,9 @@ const CommentsSheet = ({ postId, reelId, type = "post", onClose, onCountChange }
                 {sending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
               </button>
             </div>
-          </div>
-        )}
+            </>
+          )}
+        </div>
       </div>
     </div>
   );
