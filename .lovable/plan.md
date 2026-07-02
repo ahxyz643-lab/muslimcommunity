@@ -1,36 +1,75 @@
-## What to build
 
-### 1. Unified feed + Reels player launch
-- `PostCard.tsx`: when post has video (telegram_file_id/video_url), wrap video area in tap handler → navigate to `/reels?start=<postId>&type=post`.
-- `src/pages/Reels.tsx`: load BOTH `posts` (with video) and `reels` into one merged vertical list, sorted by personalized score. Accept `?start=<id>` query param to scroll to that item on mount.
-- Reels page renders both kinds: reel rows use reel_likes/reel_comments tables, post rows use likes/comments tables. Single `MediaPlayer` component handles either.
+This is a very large scope (20+ areas). Doing everything in one shot would burn credits and destabilize working features. I'll deliver it in **4 approvable phases**. Each phase is independently useful and testable. Please approve Phase 1 to start — later phases run after you review results.
 
-### 2. Personalized algorithm (per-user)
-- New SQL view + RPC `get_personalized_feed(_user_id, _limit, _offset)`:
-  - Compute user's "taste" = authors of posts/reels user liked or commented on in last 30 days (top 50).
-  - Score each candidate = `4*has_taste_author + 2*log(likes+1) + 3*log(comments+1) + recency_decay(created_at)`.
-  - Return unioned post+reel rows ordered by score DESC.
-- Home page calls `supabase.rpc('get_personalized_feed', ...)` instead of plain `from('posts')`.
-- Reels page same RPC but filtered to video-only.
+---
 
-### 3. Jobs + Donations user UI (everywhere)
-- **Bottom nav** (`BottomNav.tsx`): add Briefcase (Jobs) and HandHeart (Donate) icons → 7 tabs total OR replace least-used. Keep at 5 by moving Create into a FAB; nav becomes Home/Explore/Jobs/Donate/Profile, Messages as TopBar icon.
-- **New pages** `src/pages/Jobs.tsx` and `src/pages/Donations.tsx`: list approved entries from `jobs`/`donations` tables; "+ Post" CTA opens compose sheet writing with `status='pending'`.
-- **Explore page**: add Jobs/Donations tabs alongside existing tabs.
-- **Home feed inject**: every 10 posts inject a `JobCard` or `DonationCard` (alternating) showing top approved entry.
+## Phase 1 — Critical fixes + Guest Mode (ship first)
 
-### 4. Routes
-Add `/jobs`, `/donations` to `App.tsx`.
+**Auth**
+- Google/Apple sign-in: switch to `lovable.auth.signInWithOAuth` with `redirect_uri = window.location.origin`; remove any localhost hardcoding; store intended path separately and navigate after session hydrates.
+- Add public `/auth/callback` route for post-OAuth session pickup.
 
-## Technical details
+**Guest Mode**
+- All read routes (Home, Reels, Explore, Profile, Search) open without login.
+- New `<RequireAuth>` gate wraps like/comment/follow/message/upload; triggers a Login Modal instead of hard redirect.
 
-- **Algorithm SQL**: single SECURITY DEFINER function returning `(id uuid, kind text, user_id uuid, content text, media_url text, telegram_file_id text, likes_count int, comments_count int, created_at timestamptz, score float)`. `kind` = 'post' or 'reel'.
-- **Recency decay**: `extract(epoch from (now()-created_at))/86400` → `exp(-days/7)`.
-- **Reels list type**: existing Reels component uses one schema; refactor to a `MediaItem` union and branch on `kind` for like/comment table names.
-- **Nav layout**: 5 tabs with center floating "+" button; Messages icon moves to TopBar right side next to notifications. Cleaner Instagram-like.
-- **Feed inject cards**: small components `<JobInlineCard/>` `<DonationInlineCard/>` pulling latest 1 approved row, with "View all" → /jobs.
+**Reels fixes**
+- Comment input already always renders (last turn). Verify Reply on reels (disabled — reel_comments has no `parent_id`, keep post-only).
+- Add Follow button on every Reel and Post card.
 
-## Out of scope
-- No changes to upload pipeline or Telegram bots.
-- No admin panel changes (jobs/donations admin already exists).
-- No content embeddings; algorithm is interaction-graph based, not AI-vector.
+**Calling debug**
+- Log signaling states; ensure ringtone + incoming screen show on callee via realtime `call_logs` insert; safe-area padding on controls.
+
+**Chat audit**
+- Verify realtime subscription cleanup; fix read receipts; online status via `presence`.
+
+Deliverable: working auth, guest browsing, reels comments/follow, working calls & chat.
+
+---
+
+## Phase 2 — Liquid Glass Design System
+
+- New tokens in `index.css`: `--glass-bg`, `--glass-border`, `--glass-blur`, `--shadow-elegant`, gradient tokens.
+- `GlassCard`, `GlassNav`, `GlassSheet` primitives.
+- Fonts: SF Pro Display (display), Inter (body), Noto Naskh Arabic, Noto Nastaliq Urdu — auto-switch by content language.
+- Apply to TopBar, BottomNav, PostCard, ReelItem, CallScreen, CommentsSheet, Sheets/Dialogs.
+- Home redesign: Trending Reels rail, Latest Posts, Suggested Users, Community Recommendations.
+
+I will use the redesign skill (screenshot → 3 rendered directions → you pick one) before touching global styles.
+
+---
+
+## Phase 3 — Universal Publisher + Hiring/Support unification
+
+- One `/create` flow with 4 steps: Media → Details → SEO → Purpose (post / reel / hiring / support-request / support-offer / announcement).
+- DB: add `purpose`, `seo_title`, `seo_description`, `seo_keywords`, `hashtags`, `category`, `location` to `posts`; unify `jobs` display as a `purpose=hiring` post with a `job_id` link.
+- Hiring inline card with all fields + "Apply Now" opens application form (name, email, phone, country, city, education, experience, skills, resume upload, cover letter).
+- Employer Dashboard `/employer`: My Jobs → applications (pending/approved/rejected) → approve / reject / message applicant.
+- Profile tabs expand: Posts, Reels, Jobs, Support, Followers, Following + stats.
+
+---
+
+## Phase 4 — Performance, Notifications, Admin polish, QA
+
+- Reels playback: preload next 3 + keep prev 2 in-memory only; blob URLs revoked on eviction; no persistent cache.
+- Thumbnails: session Map cache, cleared on unload.
+- Infinite scroll on Home + Explore.
+- Notifications: add job_application / approval / rejection / support triggers; enable browser + realtime toast.
+- Admin panel: verify User/Reports/Content/Jobs/Support/Verification pages against new schema.
+- Final QA sweep with Playwright: auth, reels comment/like/follow, post upload, chat send, call ring, job apply, notification receipt.
+
+---
+
+## Technical notes (for reference)
+
+- DB additions in Phase 3 (single migration): `posts.purpose`, `posts.seo_*`, `posts.hashtags text[]`, `posts.category`, `posts.location`, `job_applications` extra columns (country, city, education, experience, skills, resume_url, cover_letter).
+- Storage: reuse `media` bucket for resumes under `resumes/{user_id}/`.
+- OAuth callback route added to `App.tsx`; existing `Auth.tsx` migrated to `lovable.auth.signInWithOAuth`.
+- Liquid Glass tokens land in `index.css` + `tailwind.config.ts`; components rewritten to use tokens (no hardcoded colors).
+- Reels memory cache: `useRef<Map<id, HTMLVideoElement>>`; only current ± window kept mounted.
+
+---
+
+**Recommended next step:** approve Phase 1. I'll ship it, we verify on the live preview, then move to Phase 2 (which will trigger the redesign flow with visual direction picks).
+
+If you'd rather I compress phases (e.g. combine 1+2 or 3+4), tell me which and I'll adjust before starting.
