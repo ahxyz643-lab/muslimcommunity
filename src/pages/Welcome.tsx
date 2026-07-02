@@ -129,6 +129,12 @@ const Welcome = () => {
         >
           Skip — I already have an account
         </button>
+        <button
+          onClick={() => navigate("/")}
+          className="mt-2 w-full text-center text-xs text-muted-foreground/70 hover:text-foreground transition-colors underline-offset-4 hover:underline"
+        >
+          Continue as guest
+        </button>
       </div>
 
       {/* Footer */}
