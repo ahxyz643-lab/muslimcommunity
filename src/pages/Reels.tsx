@@ -7,6 +7,9 @@ import { useToast } from "@/hooks/use-toast";
 import VerifiedBadge from "@/components/VerifiedBadge";
 import CommentsSheet from "@/components/CommentsSheet";
 import { getVideoSrc } from "@/lib/video";
+import FollowButton from "@/components/FollowButton";
+import LoginPromptDialog from "@/components/LoginPromptDialog";
+import { useAuth as _useAuth } from "@/contexts/AuthContext";
 
 interface Reel {
   id: string;
@@ -45,6 +48,7 @@ const ReelItem = ({ reel, isActive, onLike, onComment, onShare, muted, onToggleM
   reel: Reel; isActive: boolean; onLike: () => void; onComment: () => void; onShare: () => void;
   muted: boolean; onToggleMute: () => void; onView: () => void;
 }) => {
+  const { user: _viewer } = _useAuth();
   const videoRef = useRef<HTMLVideoElement>(null);
   const [paused, setPaused] = useState(false);
   const viewedRef = useRef(false);
@@ -129,7 +133,7 @@ const ReelItem = ({ reel, isActive, onLike, onComment, onShare, muted, onToggleM
 
       {/* Bottom info */}
       <div className="absolute inset-x-0 bottom-4 px-4 pr-20">
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
           <img
             src={reel.profile?.avatar_url || "https://i.pravatar.cc/150"}
             alt=""
@@ -137,6 +141,9 @@ const ReelItem = ({ reel, isActive, onLike, onComment, onShare, muted, onToggleM
           />
           <span className="text-sm font-semibold text-white drop-shadow-md">@{reel.profile?.username || "user"}</span>
           {reel.profile?.verified && <VerifiedBadge size="sm" />}
+          {_viewer?.id !== reel.user_id && (
+            <FollowButton targetUserId={reel.user_id} variant="pill-glass" className="ml-1" />
+          )}
         </div>
         {reel.caption && <p className="mt-2 text-sm text-white/95 drop-shadow-md line-clamp-2">{reel.caption}</p>}
         {reel.music_name && (
