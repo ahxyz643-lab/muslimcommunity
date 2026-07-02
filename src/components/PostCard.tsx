@@ -8,6 +8,8 @@ import { formatDistanceToNow } from "date-fns";
 import VerifiedBadge from "@/components/VerifiedBadge";
 import CommentsSheet from "@/components/CommentsSheet";
 import { getVideoSrc } from "@/lib/video";
+import FollowButton from "@/components/FollowButton";
+import LoginPromptDialog from "@/components/LoginPromptDialog";
 
 export interface PostWithProfile {
   id: string;
@@ -44,6 +46,7 @@ const PostCard = ({ post, onDelete }: { post: PostWithProfile; onDelete?: (id: s
   const [showMenu, setShowMenu] = useState(false);
   const [showComments, setShowComments] = useState(false);
   const [isPlaying, setIsPlaying] = useState(false);
+  const [loginPrompt, setLoginPrompt] = useState<null | string>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
 
   // Check initial status
@@ -58,7 +61,7 @@ const PostCard = ({ post, onDelete }: { post: PostWithProfile; onDelete?: (id: s
   }, [user?.id, post.id]);
 
   const handleLike = async () => {
-    if (!user) return;
+    if (!user) { setLoginPrompt("like posts"); return; }
     if (liked) {
       await supabase.from("likes").delete().eq("user_id", user.id).eq("post_id", post.id);
       setLiked(false);
@@ -74,7 +77,7 @@ const PostCard = ({ post, onDelete }: { post: PostWithProfile; onDelete?: (id: s
   };
 
   const handleSave = async () => {
-    if (!user) return;
+    if (!user) { setLoginPrompt("save posts"); return; }
     if (saved) {
       await supabase.from("saves").delete().eq("user_id", user.id).eq("post_id", post.id);
       setSaved(false);
@@ -87,7 +90,7 @@ const PostCard = ({ post, onDelete }: { post: PostWithProfile; onDelete?: (id: s
   };
 
   const handleRepost = async () => {
-    if (!user) return;
+    if (!user) { setLoginPrompt("repost"); return; }
     if (reposted) {
       await supabase.from("reposts").delete().eq("user_id", user.id).eq("post_id", post.id);
       setReposted(false);
@@ -158,7 +161,9 @@ const PostCard = ({ post, onDelete }: { post: PostWithProfile; onDelete?: (id: s
               <span className="text-xs text-muted-foreground">@{profile?.username || "user"} · {timeAgo}</span>
             </div>
           </button>
-          <div className="relative">
+          <div className="flex items-center gap-2">
+            {user?.id !== post.user_id && <FollowButton targetUserId={post.user_id} />}
+            <div className="relative">
             <button onClick={() => setShowMenu(!showMenu)} className="rounded-full p-1.5 text-muted-foreground hover:bg-secondary">
               <MoreHorizontal className="h-5 w-5" />
             </button>
@@ -174,6 +179,7 @@ const PostCard = ({ post, onDelete }: { post: PostWithProfile; onDelete?: (id: s
                 </button>
               </div>
             )}
+            </div>
           </div>
         </div>
 
@@ -219,7 +225,7 @@ const PostCard = ({ post, onDelete }: { post: PostWithProfile; onDelete?: (id: s
               <Heart className={`h-5 w-5 transition-all duration-200 ${liked ? "fill-destructive text-destructive scale-110" : "text-muted-foreground group-hover:text-destructive"}`} />
               <span className={`text-xs ${liked ? "text-destructive font-medium" : "text-muted-foreground"}`}>{formatCount(likesCount)}</span>
             </button>
-            <button onClick={() => setShowComments(true)} className="group flex items-center gap-1.5">
+            <button onClick={() => { if (!user) { setLoginPrompt("comment"); return; } setShowComments(true); }} className="group flex items-center gap-1.5">
               <MessageCircle className="h-5 w-5 text-muted-foreground transition-colors group-hover:text-primary" />
               <span className="text-xs text-muted-foreground">{formatCount(commentsCount)}</span>
             </button>
@@ -246,6 +252,7 @@ const PostCard = ({ post, onDelete }: { post: PostWithProfile; onDelete?: (id: s
           onCountChange={(d) => setCommentsCount((c) => c + d)}
         />
       )}
+      <LoginPromptDialog open={!!loginPrompt} onOpenChange={(v) => !v && setLoginPrompt(null)} action={loginPrompt || undefined} />
     </>
   );
 };

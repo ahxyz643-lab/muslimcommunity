@@ -1,5 +1,6 @@
 import { Home, Compass, Briefcase, HandHeart, User, Plus } from "lucide-react";
 import { useLocation, useNavigate } from "react-router-dom";
+import { useAuth } from "@/contexts/AuthContext";
 
 const navItems = [
   { icon: Home, label: "Home", path: "/" },
@@ -13,6 +14,12 @@ const navItems = [
 const BottomNav = () => {
   const location = useLocation();
   const navigate = useNavigate();
+  const { user } = useAuth();
+  const guestGated = new Set(["/create", "/profile"]);
+  const go = (path: string) => {
+    if (!user && guestGated.has(path)) { navigate("/auth"); return; }
+    navigate(path);
+  };
 
   return (
     <nav className="fixed bottom-0 left-0 right-0 z-50 border-t border-border bg-card/95 backdrop-blur-xl">
@@ -22,7 +29,7 @@ const BottomNav = () => {
           return (
             <button
               key={path}
-              onClick={() => navigate(path)}
+              onClick={() => go(path)}
               className={`flex flex-col items-center gap-0.5 rounded-xl px-3 py-1.5 transition-all duration-200 ${
                 active
                   ? "text-primary"
