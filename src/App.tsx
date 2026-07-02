@@ -65,12 +65,12 @@ const AppRoutes = () => {
       <Routes>
         <Route path="/welcome" element={user ? <Navigate to="/" replace /> : <Welcome />} />
         <Route path="/auth" element={user ? <Navigate to="/" replace /> : <Auth />} />
-        <Route path="/" element={<ProtectedRoute><Home /></ProtectedRoute>} />
-        <Route path="/explore" element={<ProtectedRoute><Explore /></ProtectedRoute>} />
+        <Route path="/" element={<Home />} />
+        <Route path="/explore" element={<Explore />} />
         <Route path="/create" element={<ProtectedRoute><CreatePost /></ProtectedRoute>} />
         <Route path="/messages" element={<ProtectedRoute><Messages /></ProtectedRoute>} />
         <Route path="/profile" element={<ProtectedRoute><Profile /></ProtectedRoute>} />
-        <Route path="/user/:userId" element={<ProtectedRoute><UserProfilePage /></ProtectedRoute>} />
+        <Route path="/user/:userId" element={<UserProfilePage />} />
         <Route path="/edit-profile" element={<ProtectedRoute><EditProfile /></ProtectedRoute>} />
         <Route path="/settings" element={<ProtectedRoute><Settings /></ProtectedRoute>} />
         <Route path="/activity" element={<ProtectedRoute><Activity /></ProtectedRoute>} />
@@ -96,13 +96,13 @@ const AppRoutes = () => {
           <Route path="monetization" element={<AdminMonetization />} />
           <Route path="ai" element={<AdminAI />} />
         </Route>
-        <Route path="/reels" element={<ProtectedRoute><Reels /></ProtectedRoute>} />
+        <Route path="/reels" element={<Reels />} />
         <Route path="/reels/create" element={<ProtectedRoute><CreateReel /></ProtectedRoute>} />
-        <Route path="/jobs" element={<ProtectedRoute><Jobs /></ProtectedRoute>} />
-        <Route path="/donations" element={<ProtectedRoute><Donations /></ProtectedRoute>} />
+        <Route path="/jobs" element={<Jobs />} />
+        <Route path="/donations" element={<Donations />} />
         <Route path="*" element={<NotFound />} />
       </Routes>
-      {user && !onAdmin && <BottomNav />}
+      {!onAdmin && <BottomNav />}
     </div>
   );
 };
