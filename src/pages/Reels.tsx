@@ -169,6 +169,7 @@ const Reels = () => {
   const [muted, setMuted] = useState(true);
   const [commentReelId, setCommentReelId] = useState<string | null>(null);
   const [commentKind, setCommentKind] = useState<"post" | "reel">("reel");
+  const [loginPrompt, setLoginPrompt] = useState<null | string>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
   const loadReels = useCallback(async () => {
@@ -258,7 +259,7 @@ const Reels = () => {
   }, [reels]);
 
   const handleLike = async (reel: Reel) => {
-    if (!user) { navigate("/auth"); return; }
+    if (!user) { setLoginPrompt("like reels"); return; }
     const likeTbl = reel.kind === "reel" ? "reel_likes" : "likes";
     const idCol = reel.kind === "reel" ? "reel_id" : "post_id";
     if (reel.liked) {
@@ -347,6 +348,7 @@ const Reels = () => {
           onCountChange={(d) => setReels((prev) => prev.map((r) => r.id === commentReelId ? { ...r, comments_count: Math.max(0, r.comments_count + d) } : r))}
         />
       )}
+      <LoginPromptDialog open={!!loginPrompt} onOpenChange={(v) => !v && setLoginPrompt(null)} action={loginPrompt || undefined} />
     </div>
   );
 };
