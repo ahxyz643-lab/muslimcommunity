@@ -45,7 +45,7 @@ const TopBar = () => {
   }, [user?.id, qc]);
 
   return (
-    <header className="fixed left-0 right-0 top-0 z-50 border-b border-border bg-card/90 backdrop-blur-xl">
+    <header className="glass-strong fixed left-0 right-0 top-0 z-50">
       <div className="mx-auto flex max-w-lg items-center justify-between px-4 py-3">
         <button onClick={() => navigate("/")} className="flex items-center gap-2">
           <img src={appLogo} alt="Logo" className="h-8 w-8 rounded-lg" />

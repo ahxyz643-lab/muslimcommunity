@@ -46,7 +46,7 @@ const Settings = () => {
 
   const handleSignOut = async () => {
     await signOut();
-    navigate("/welcome");
+    navigate("/");
   };
 
   return (
