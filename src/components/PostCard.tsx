@@ -10,6 +10,7 @@ import CommentsSheet from "@/components/CommentsSheet";
 import { getVideoSrc } from "@/lib/video";
 import FollowButton from "@/components/FollowButton";
 import LoginPromptDialog from "@/components/LoginPromptDialog";
+import HiringInlineCard from "@/components/HiringInlineCard";
 
 export interface PostWithProfile {
   id: string;
@@ -24,6 +25,13 @@ export interface PostWithProfile {
   language: string | null;
   created_at: string;
   user_id: string;
+  purpose?: string | null;
+  title?: string | null;
+  category?: string | null;
+  location?: string | null;
+  hashtags?: string[] | null;
+  job_id?: string | null;
+  donation_id?: string | null;
   profiles: {
     username: string | null;
     display_name: string | null;
@@ -185,8 +193,15 @@ const PostCard = ({ post, onDelete }: { post: PostWithProfile; onDelete?: (id: s
 
         {/* Content */}
         <div className="px-4 pb-2">
+          {post.title && post.purpose && post.purpose !== "post" && (
+            <h3 className="mb-1 font-serif text-lg leading-snug text-foreground">{post.title}</h3>
+          )}
           <p className="whitespace-pre-wrap text-sm leading-relaxed text-foreground">{post.content}</p>
         </div>
+
+        {post.purpose === "hiring" && post.job_id && (
+          <HiringInlineCard jobId={post.job_id} />
+        )}
 
         {post.image_url && (
           <div className="px-4 pb-3">

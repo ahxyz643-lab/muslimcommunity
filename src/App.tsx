@@ -17,6 +17,7 @@ import EditProfile from "@/pages/EditProfile";
 import Settings from "@/pages/Settings";
 import Activity from "@/pages/Activity";
 import CreatorStudio from "@/pages/CreatorStudio";
+import Employer from "@/pages/Employer";
 import Auth from "@/pages/Auth";
 import Welcome from "@/pages/Welcome";
 import UserProfilePage from "@/pages/UserProfilePage";
@@ -75,6 +76,7 @@ const AppRoutes = () => {
         <Route path="/settings" element={<ProtectedRoute><Settings /></ProtectedRoute>} />
         <Route path="/activity" element={<ProtectedRoute><Activity /></ProtectedRoute>} />
         <Route path="/creator-studio" element={<ProtectedRoute><CreatorStudio /></ProtectedRoute>} />
+        <Route path="/employer" element={<ProtectedRoute><Employer /></ProtectedRoute>} />
         <Route path="/admin" element={<ProtectedRoute><AdminLayout /></ProtectedRoute>}>
           <Route index element={<AdminDashboard />} />
           <Route path="users" element={<AdminUsers />} />
