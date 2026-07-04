@@ -2,6 +2,7 @@ import { useEffect, useState, Fragment } from "react";
 import TopBar from "@/components/TopBar";
 import PostCard, { PostWithProfile } from "@/components/PostCard";
 import ReelsPreviewBar from "@/components/ReelsPreviewBar";
+import GuestHero from "@/components/GuestHero";
 import JobInlineCard from "@/components/JobInlineCard";
 import DonationInlineCard from "@/components/DonationInlineCard";
 import { supabase } from "@/integrations/supabase/client";
@@ -43,6 +44,13 @@ const Home = () => {
   return (
     <div className="pb-20 pt-14">
       <TopBar />
+      {!user && (
+        <GuestHero
+          onContinueGuest={() =>
+            window.scrollTo({ top: window.innerHeight * 0.6, behavior: "smooth" })
+          }
+        />
+      )}
       <ReelsPreviewBar />
       {loading ? (
         <div className="flex items-center justify-center py-20"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>
