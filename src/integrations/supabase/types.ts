@@ -262,69 +262,129 @@ export type Database = {
       job_applications: {
         Row: {
           applicant_id: string
+          city: string | null
+          country: string | null
+          cover_letter: string | null
           created_at: string
+          education: string | null
+          email: string | null
+          experience: string | null
+          full_name: string | null
           id: string
           job_id: string
           message: string | null
+          phone: string | null
+          resume_url: string | null
+          reviewed_at: string | null
+          reviewer_notes: string | null
+          skills: string[]
+          status: string
         }
         Insert: {
           applicant_id: string
+          city?: string | null
+          country?: string | null
+          cover_letter?: string | null
           created_at?: string
+          education?: string | null
+          email?: string | null
+          experience?: string | null
+          full_name?: string | null
           id?: string
           job_id: string
           message?: string | null
+          phone?: string | null
+          resume_url?: string | null
+          reviewed_at?: string | null
+          reviewer_notes?: string | null
+          skills?: string[]
+          status?: string
         }
         Update: {
           applicant_id?: string
+          city?: string | null
+          country?: string | null
+          cover_letter?: string | null
           created_at?: string
+          education?: string | null
+          email?: string | null
+          experience?: string | null
+          full_name?: string | null
           id?: string
           job_id?: string
           message?: string | null
+          phone?: string | null
+          resume_url?: string | null
+          reviewed_at?: string | null
+          reviewer_notes?: string | null
+          skills?: string[]
+          status?: string
         }
         Relationships: []
       }
       jobs: {
         Row: {
           applicants_count: number
+          apply_deadline: string | null
+          city: string | null
           company: string | null
           contact_link: string | null
+          country: string | null
           created_at: string
           description: string
+          education_level: string | null
+          experience_level: string | null
           id: string
           job_type: string | null
           location: string | null
           poster_id: string
+          remote: boolean
           salary_range: string | null
+          skills: string[]
           status: string
           title: string
           updated_at: string
         }
         Insert: {
           applicants_count?: number
+          apply_deadline?: string | null
+          city?: string | null
           company?: string | null
           contact_link?: string | null
+          country?: string | null
           created_at?: string
           description: string
+          education_level?: string | null
+          experience_level?: string | null
           id?: string
           job_type?: string | null
           location?: string | null
           poster_id: string
+          remote?: boolean
           salary_range?: string | null
+          skills?: string[]
           status?: string
           title: string
           updated_at?: string
         }
         Update: {
           applicants_count?: number
+          apply_deadline?: string | null
+          city?: string | null
           company?: string | null
           contact_link?: string | null
+          country?: string | null
           created_at?: string
           description?: string
+          education_level?: string | null
+          experience_level?: string | null
           id?: string
           job_type?: string | null
           location?: string | null
           poster_id?: string
+          remote?: boolean
           salary_range?: string | null
+          skills?: string[]
           status?: string
           title?: string
           updated_at?: string
@@ -436,54 +496,99 @@ export type Database = {
       }
       posts: {
         Row: {
+          category: string | null
           comments_count: number
           content: string
           created_at: string
+          donation_id: string | null
+          hashtags: string[]
           hidden: boolean
           id: string
           image_url: string | null
+          job_id: string | null
           language: string | null
           likes_count: number
+          location: string | null
+          purpose: string
           reposts_count: number
           saves_count: number
+          seo_description: string | null
+          seo_slug: string | null
+          seo_title: string | null
           telegram_file_id: string | null
+          title: string | null
           updated_at: string
           user_id: string
           video_url: string | null
         }
         Insert: {
+          category?: string | null
           comments_count?: number
           content: string
           created_at?: string
+          donation_id?: string | null
+          hashtags?: string[]
           hidden?: boolean
           id?: string
           image_url?: string | null
+          job_id?: string | null
           language?: string | null
           likes_count?: number
+          location?: string | null
+          purpose?: string
           reposts_count?: number
           saves_count?: number
+          seo_description?: string | null
+          seo_slug?: string | null
+          seo_title?: string | null
           telegram_file_id?: string | null
+          title?: string | null
           updated_at?: string
           user_id: string
           video_url?: string | null
         }
         Update: {
+          category?: string | null
           comments_count?: number
           content?: string
           created_at?: string
+          donation_id?: string | null
+          hashtags?: string[]
           hidden?: boolean
           id?: string
           image_url?: string | null
+          job_id?: string | null
           language?: string | null
           likes_count?: number
+          location?: string | null
+          purpose?: string
           reposts_count?: number
           saves_count?: number
+          seo_description?: string | null
+          seo_slug?: string | null
+          seo_title?: string | null
           telegram_file_id?: string | null
+          title?: string | null
           updated_at?: string
           user_id?: string
           video_url?: string | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "posts_donation_id_fkey"
+            columns: ["donation_id"]
+            isOneToOne: false
+            referencedRelation: "donations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "posts_job_id_fkey"
+            columns: ["job_id"]
+            isOneToOne: false
+            referencedRelation: "jobs"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       profiles: {
         Row: {
