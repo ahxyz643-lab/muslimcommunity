@@ -199,10 +199,6 @@ const PostCard = ({ post, onDelete }: { post: PostWithProfile; onDelete?: (id: s
           <p className="whitespace-pre-wrap text-sm leading-relaxed text-foreground">{post.content}</p>
         </div>
 
-        {post.purpose === "hiring" && post.job_id && (
-          <HiringInlineCard jobId={post.job_id} />
-        )}
-
         {post.image_url && (
           <div className="px-4 pb-3">
             <img src={post.image_url} alt="Post content" className="w-full rounded-xl object-cover" style={{ maxHeight: 400 }} />
@@ -231,6 +227,10 @@ const PostCard = ({ post, onDelete }: { post: PostWithProfile; onDelete?: (id: s
               </span>
             </button>
           </div>
+        )}
+
+        {post.purpose === "hiring" && post.job_id && (
+          <HiringInlineCard jobId={post.job_id} />
         )}
 
         {/* Actions */}
