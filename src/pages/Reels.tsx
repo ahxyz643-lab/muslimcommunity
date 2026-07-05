@@ -365,9 +365,10 @@ const Reels = () => {
     setReels((prev) => prev.map((r) => r.id === reel.id ? { ...r, views_count: (r.views_count || 0) + 1 } : r));
   };
 
+  useSeo("Reels · Muslim Community", "Short videos and inspiration from the Muslim community.");
+
   return (
     <div className="fixed inset-0 z-40 bg-black">
-      <SeoTag />
       {/* Header */}
       <div className="absolute left-0 right-0 top-0 z-20 flex items-center justify-between px-4 py-3 bg-gradient-to-b from-black/60 to-transparent">
         <button onClick={() => navigate("/")} className="text-white">
