@@ -1,106 +1,63 @@
-## Phase 3 — Universal Publisher + Hiring/Support Unification
+# Phase 4 — Performance, Notifications, Admin polish, QA
 
-Goal: One create flow (`/create`) that publishes any content type — post, reel, hiring, support request, support offer, announcement — into a single feed model, plus a proper Employer/Applicant flow.
+Ship the last major pass: make the app fast, make notifications real, sharpen admin tooling, and lock down obvious QA gaps.
 
----
+## 1. Performance
 
-### 1. Data model (single migration)
+**Feed & Reels**
+- Add DB indexes: `posts(purpose, created_at desc)`, `posts(user_id, created_at desc)`, `reels(created_at desc)`, `job_applications(job_id, status)`, `notifications(user_id, read, created_at desc)`.
+- `PostCard`: memoize with `React.memo`, lazy-mount `CommentsSheet` / `HiringInlineCard` only when needed (already lazy for comments; make hiring card lazy via dynamic import).
+- Home feed: paginate with `range()` (20 per page) + IntersectionObserver "load more" instead of one big fetch.
+- Reels: keep only ±2 videos mounted, unload the rest (`<video>` `preload="none"` for offscreen); reuse existing IntersectionObserver.
+- Images: add `loading="lazy"` + `decoding="async"` on avatars and post images sitewide.
 
-Extend `posts` to be the unified content record. Keep `jobs` and `donations` as detail rows linked back to a post.
+**Bundle**
+- Route-level `React.lazy` for `Admin`, `CreatorStudio`, `Employer`, `Donations`, `CreatePost`, `CreateReel`, `Reels` with `Suspense` fallback (spinner).
+- Drop unused `date-fns` locales; keep default.
 
-`posts` new columns:
-- `purpose` text NOT NULL DEFAULT `'post'` — enum-ish: `post | reel | hiring | support_request | support_offer | announcement`
-- `title` text (optional headline, used by hiring/support)
-- `category` text (e.g. `tech`, `education`, `medical`, `food`, `zakat`)
-- `location` text
-- `hashtags` text[] NOT NULL DEFAULT `'{}'`
-- `seo_title` text, `seo_description` text, `seo_slug` text unique-nullable
-- `job_id` uuid nullable → `jobs.id` (for `purpose='hiring'`)
-- `donation_id` uuid nullable → `donations.id` (for `purpose='support_request'`)
+## 2. Notifications (real, not just DB rows)
 
-`jobs` new columns (fill hiring form):
-- `country`, `city`, `experience_level`, `education_level`, `skills` text[], `apply_deadline` timestamptz, `remote` boolean
+- New `NotificationsBell` in `TopBar` showing unread count badge; subscribes via Realtime to `notifications where user_id=me`.
+- Enable Realtime on `notifications`: `ALTER PUBLICATION supabase_realtime ADD TABLE public.notifications;`.
+- `Activity` page: mark-as-read on open (`update notifications set read=true where user_id=me and read=false`), tap-through routing:
+  - `like` / `comment` on post → `/reels?start=<post_id>&kind=post` if video else scroll to post.
+  - `reel` events → `/reels?start=<reel_id>`.
+  - `follow` → `/user/<actor_id>`.
+  - `message` → `/messages?c=<conversation_id>`.
+  - `job_application` → `/employer`.
+  - `job_application_status` → `/jobs`.
+- Toast on incoming realtime notification while app is open.
 
-`job_applications` new columns:
-- `full_name`, `email`, `phone`, `country`, `city`, `education`, `experience`, `skills` text[], `resume_url`, `cover_letter`, `status` text default `'pending'` (pending/approved/rejected), `reviewed_at`, `reviewer_notes`
+## 3. Admin polish
 
-Indexes on `posts(purpose, created_at desc)`, `posts(category)`, `posts using gin(hashtags)`.
+- `AdminDashboard`: live counters (users, posts, reels, pending reports, pending job applications, open support tickets) with skeletons.
+- `AdminReports`: quick actions — hide post, ban user (sets `profiles.banned=true`), mark resolved. Uses existing `guard_profile_sensitive` (admin-only).
+- `AdminJobs`: list all jobs + applicants count, toggle `jobs.status`, delete.
+- `AdminUsers`: search by username/email, verify/unverify, ban/unban, role assign (writes `user_roles`).
+- All admin writes go through existing RLS + `has_role('admin')` — no new edge functions needed.
 
-RLS: keep existing post policies; add "employer can read applications for their jobs" policy on `job_applications` via `posts.user_id = auth.uid()` join through `jobs`.
+## 4. QA & polish
 
-### 2. Universal Publisher UI — `/create`
+- Fix Reels: `views_count` update can race; switch to atomic `rpc('increment_reel_view', { _id })` (add small SECURITY DEFINER function).
+- `ApplyDialog`: block duplicate apply (`select 1 from job_applications where job_id=? and applicant_id=?`) → toast "You already applied".
+- `HiringInlineCard`: subscribe to `job_applications` inserts for that job so `applicants_count` updates live for the owner.
+- Empty states: Jobs, Employer, Activity, Messages get proper illustrations + CTA.
+- Error boundaries around `Home`, `Reels`, `Admin`.
+- SEO: per-route `<title>` / `<meta description>` via a tiny `useSeo(title, desc)` hook applied on Home, Jobs, Reels, Profile, Auth.
+- Accessibility: `aria-label` on all icon-only buttons in `PostCard`, `Reels`, `BottomNav`, `TopBar`.
 
-Replace `CreatePost.tsx` + `CreateReel.tsx` with a single stepper at `src/pages/Create.tsx`:
+## 5. Out of scope (later phase)
 
-```
-Step 1  Media       image / video / none (auto-detects reel if vertical video)
-Step 2  Details     caption, title, category, location, hashtags
-Step 3  SEO         seo_title, seo_description, auto slug
-Step 4  Purpose     radio: Post · Reel · Hiring · Support request · Support offer · Announcement
-                    → renders purpose-specific sub-form (JobFields / SupportFields)
-```
+- Payments / paid job boosts.
+- Push notifications (web-push) — only in-app + realtime for now.
+- Video transcoding pipeline.
+- Full i18n beyond current translation system.
 
-New components under `src/components/create/`:
-- `MediaStep.tsx`, `DetailsStep.tsx`, `SeoStep.tsx`, `PurposeStep.tsx`
-- `HiringFields.tsx` — company, role, type, salary, remote, deadline, skills, country/city, education, experience
-- `SupportFields.tsx` — amount, currency, category, contact, target audience
+## Technical notes
 
-Publishing writes to `posts` in one transaction; if purpose=hiring also insert into `jobs` and set `job_id`; if support_request also insert into `donations` and set `donation_id`. Reels remain in `reels` table but a mirror row lands in `posts` with `purpose='reel'` for unified feed queries.
+- One migration: indexes + realtime publication + `increment_reel_view` function.
+- New files: `src/components/NotificationsBell.tsx`, `src/hooks/useSeo.ts`, `src/components/ErrorBoundary.tsx`.
+- Touched: `App.tsx` (lazy routes + ErrorBoundary), `TopBar.tsx`, `Activity.tsx`, `Home.tsx`, `Reels.tsx`, `PostCard.tsx`, `HiringInlineCard.tsx`, `ApplyDialog.tsx`, admin pages listed above.
+- No new secrets, no edge functions.
 
-Old `CreatePost` / `CreateReel` routes redirect to `/create?purpose=post|reel`.
-
-### 3. Feed rendering
-
-- `PostCard.tsx` dispatches by `post.purpose`:
-  - `post`, `announcement` → current layout
-  - `hiring` → inline `HiringCard` with title/company/location/salary chips + **Apply Now** button
-  - `support_request` → inline `SupportCard` with progress bar + **Support** button
-  - `reel` → link chip to `/reels/:id`
-- `HiringCard` opens `ApplyDialog` (name, email, phone, country, city, education, experience, skills chips, resume upload to `media` bucket, cover letter). Writes to `job_applications`, increments `jobs.applicants_count`, triggers notification to employer.
-
-### 4. Employer Dashboard — `/employer`
-
-New page `src/pages/Employer.tsx` (auth-required):
-- Tab "My Jobs" — list of hiring posts by current user with counts
-- Click job → applicants panel: filter pending/approved/rejected
-- Row actions: Approve, Reject, Message (opens conversation), View resume
-- Approve/Reject calls edge function `review-application` that updates status, sets `reviewed_at`, notifies applicant
-
-Link entry point from Profile menu and from each own HiringCard ("Manage applicants").
-
-### 5. Profile tabs
-
-Add tabs on `Profile.tsx` + `UserProfilePage.tsx`:
-`Posts · Reels · Hiring · Support · Saves`
-
-Each tab queries `posts` filtered by `purpose` and owner.
-
-### 6. Wiring & cleanup
-
-- Route registration in `src/App.tsx`: `/create`, `/employer`; keep `/jobs` (browse) but source from `posts where purpose='hiring'`.
-- `BottomNav` "+" button → `/create`.
-- Update `fetchPostsWithProfiles` to include new columns.
-- Deprecate direct `CreatePost` / `CreateReel` UI (keep files as thin wrappers routing to `/create`).
-
-### 7. Notifications
-
-Add triggers:
-- `job_application` inserted → notify employer
-- `job_applications.status` changed to approved/rejected → notify applicant
-- `support_request` new pledge → notify requester (existing donation flow reused)
-
-### Technical details
-
-- Migration is one file with all schema, grants, RLS, triggers.
-- `Create.tsx` uses `react-hook-form` + `zod` for validation per step.
-- Resume upload: `media` bucket, path `resumes/{user_id}/{uuid}.pdf`, max 5MB, PDF/DOC only.
-- Employer approval uses edge function `review-application` (verify_jwt=false, JWT validated in code) so we can atomically update + notify.
-- Reuse `GuestHero` gating: unauthenticated Apply → `LoginPromptDialog`.
-
-### Out of scope for this phase
-- Payments for support/donations (Phase 4)
-- Home hero redesign polish (done in Phase 2)
-- Reels performance cache eviction (Phase 4)
-- Admin panel updates for new purposes (Phase 4)
-
-Approve to start with the migration, then Universal Publisher, then Employer dashboard.
+Approve to start implementation.
