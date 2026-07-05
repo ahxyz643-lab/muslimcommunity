@@ -66,6 +66,20 @@ const ApplyDialog = ({ open, onOpenChange, jobId, jobTitle }: ApplyDialogProps) 
 
     setSubmitting(true);
     try {
+      // Prevent duplicate applications
+      const { data: existing } = await supabase
+        .from("job_applications")
+        .select("id")
+        .eq("job_id", jobId)
+        .eq("applicant_id", user.id)
+        .maybeSingle();
+      if (existing) {
+        toast({ title: "You already applied to this job", variant: "destructive" });
+        setSubmitting(false);
+        onOpenChange(false);
+        return;
+      }
+
       let resume_url: string | null = null;
       if (resume) {
         const ext = resume.name.split(".").pop() || "pdf";
