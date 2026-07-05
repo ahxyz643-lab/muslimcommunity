@@ -12,6 +12,7 @@ import LoginPromptDialog from "@/components/LoginPromptDialog";
 import ApplyDialog from "@/components/ApplyDialog";
 import { Briefcase, Users } from "lucide-react";
 import { useAuth as _useAuth } from "@/contexts/AuthContext";
+import { useSeo } from "@/hooks/useSeo";
 
 interface Reel {
   id: string;
@@ -102,6 +103,7 @@ const ReelItem = ({ reel, isActive, onLike, onComment, onShare, muted, onToggleM
         playsInline
         muted={muted}
         onClick={togglePlay}
+        preload={isActive ? "auto" : "none"}
         className="h-full w-full object-cover"
         style={{ filter: FILTER_CSS[reel.filter || "none"] }}
       />
@@ -359,12 +361,13 @@ const Reels = () => {
 
   const handleView = async (reel: Reel) => {
     if (reel.kind !== "reel") return;
-    await supabase.from("reels").update({ views_count: reel.views_count + 1 }).eq("id", reel.id);
-    setReels((prev) => prev.map((r) => r.id === reel.id ? { ...r, views_count: r.views_count + 1 } : r));
+    await supabase.rpc("increment_reel_view", { _id: reel.id });
+    setReels((prev) => prev.map((r) => r.id === reel.id ? { ...r, views_count: (r.views_count || 0) + 1 } : r));
   };
 
   return (
     <div className="fixed inset-0 z-40 bg-black">
+      <SeoTag />
       {/* Header */}
       <div className="absolute left-0 right-0 top-0 z-20 flex items-center justify-between px-4 py-3 bg-gradient-to-b from-black/60 to-transparent">
         <button onClick={() => navigate("/")} className="text-white">
