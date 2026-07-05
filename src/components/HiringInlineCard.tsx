@@ -41,6 +41,19 @@ const HiringInlineCard = ({ jobId }: { jobId: string }) => {
     return () => { alive = false; };
   }, [jobId]);
 
+  // Live-update applicants_count when new applications come in
+  useEffect(() => {
+    const ch = supabase
+      .channel(`job-apps-${jobId}`)
+      .on(
+        "postgres_changes",
+        { event: "INSERT", schema: "public", table: "job_applications", filter: `job_id=eq.${jobId}` },
+        () => setJob((prev) => (prev ? { ...prev, applicants_count: (prev.applicants_count || 0) + 1 } : prev)),
+      )
+      .subscribe();
+    return () => { supabase.removeChannel(ch); };
+  }, [jobId]);
+
   if (!job) {
     return <div className="mx-4 mb-3 h-24 animate-pulse rounded-2xl border border-border bg-secondary/40" />;
   }

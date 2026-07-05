@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, lazy, Suspense } from "react";
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -8,44 +8,53 @@ import { AuthProvider, useAuth } from "@/contexts/AuthContext";
 import { ThemeProvider } from "@/contexts/ThemeContext";
 import SplashScreen from "@/components/SplashScreen";
 import BottomNav from "@/components/BottomNav";
+import ErrorBoundary from "@/components/ErrorBoundary";
 import Home from "@/pages/Home";
 import Explore from "@/pages/Explore";
-import CreatePost from "@/pages/CreatePost";
 import Messages from "@/pages/Messages";
 import Profile from "@/pages/Profile";
 import EditProfile from "@/pages/EditProfile";
 import Settings from "@/pages/Settings";
 import Activity from "@/pages/Activity";
-import CreatorStudio from "@/pages/CreatorStudio";
-import Employer from "@/pages/Employer";
 import Auth from "@/pages/Auth";
 import Welcome from "@/pages/Welcome";
 import UserProfilePage from "@/pages/UserProfilePage";
-import Reels from "@/pages/Reels";
-import CreateReel from "@/pages/CreateReel";
 import Jobs from "@/pages/Jobs";
-import Donations from "@/pages/Donations";
 import NotFound from "@/pages/NotFound";
-import AdminLayout from "@/components/admin/AdminLayout";
-import AdminDashboard from "@/pages/admin/AdminDashboard";
-import AdminUsers from "@/pages/admin/AdminUsers";
-import AdminVerification from "@/pages/admin/AdminVerification";
-import AdminContent from "@/pages/admin/AdminContent";
-import AdminReels from "@/pages/admin/AdminReels";
-import AdminComments from "@/pages/admin/AdminComments";
-import AdminChats from "@/pages/admin/AdminChats";
-import AdminJobs from "@/pages/admin/AdminJobs";
-import AdminDonations from "@/pages/admin/AdminDonations";
-import AdminReports from "@/pages/admin/AdminReports";
-import AdminStorage from "@/pages/admin/AdminStorage";
-import AdminAnalytics from "@/pages/admin/AdminAnalytics";
-import AdminNotifications from "@/pages/admin/AdminNotifications";
-import AdminRoles from "@/pages/admin/AdminRoles";
-import AdminSettings from "@/pages/admin/AdminSettings";
-import AdminSecurity from "@/pages/admin/AdminSecurity";
-import AdminSupport from "@/pages/admin/AdminSupport";
-import AdminMonetization from "@/pages/admin/AdminMonetization";
-import AdminAI from "@/pages/admin/AdminAI";
+
+// Lazy heavier routes to shrink initial bundle
+const CreatePost = lazy(() => import("@/pages/CreatePost"));
+const CreatorStudio = lazy(() => import("@/pages/CreatorStudio"));
+const Employer = lazy(() => import("@/pages/Employer"));
+const Reels = lazy(() => import("@/pages/Reels"));
+const CreateReel = lazy(() => import("@/pages/CreateReel"));
+const Donations = lazy(() => import("@/pages/Donations"));
+const AdminLayout = lazy(() => import("@/components/admin/AdminLayout"));
+const AdminDashboard = lazy(() => import("@/pages/admin/AdminDashboard"));
+const AdminUsers = lazy(() => import("@/pages/admin/AdminUsers"));
+const AdminVerification = lazy(() => import("@/pages/admin/AdminVerification"));
+const AdminContent = lazy(() => import("@/pages/admin/AdminContent"));
+const AdminReels = lazy(() => import("@/pages/admin/AdminReels"));
+const AdminComments = lazy(() => import("@/pages/admin/AdminComments"));
+const AdminChats = lazy(() => import("@/pages/admin/AdminChats"));
+const AdminJobs = lazy(() => import("@/pages/admin/AdminJobs"));
+const AdminDonations = lazy(() => import("@/pages/admin/AdminDonations"));
+const AdminReports = lazy(() => import("@/pages/admin/AdminReports"));
+const AdminStorage = lazy(() => import("@/pages/admin/AdminStorage"));
+const AdminAnalytics = lazy(() => import("@/pages/admin/AdminAnalytics"));
+const AdminNotifications = lazy(() => import("@/pages/admin/AdminNotifications"));
+const AdminRoles = lazy(() => import("@/pages/admin/AdminRoles"));
+const AdminSettings = lazy(() => import("@/pages/admin/AdminSettings"));
+const AdminSecurity = lazy(() => import("@/pages/admin/AdminSecurity"));
+const AdminSupport = lazy(() => import("@/pages/admin/AdminSupport"));
+const AdminMonetization = lazy(() => import("@/pages/admin/AdminMonetization"));
+const AdminAI = lazy(() => import("@/pages/admin/AdminAI"));
+
+const RouteFallback = () => (
+  <div className="flex min-h-[40vh] items-center justify-center">
+    <div className="h-8 w-8 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+  </div>
+);
 
 const queryClient = new QueryClient();
 
@@ -63,6 +72,8 @@ const AppRoutes = () => {
 
   return (
     <div className="mx-auto min-h-screen max-w-lg">
+      <ErrorBoundary>
+      <Suspense fallback={<RouteFallback />}>
       <Routes>
         <Route path="/welcome" element={user ? <Navigate to="/" replace /> : <Welcome />} />
         <Route path="/auth" element={user ? <Navigate to="/" replace /> : <Auth />} />
@@ -104,6 +115,8 @@ const AppRoutes = () => {
         <Route path="/donations" element={<Donations />} />
         <Route path="*" element={<NotFound />} />
       </Routes>
+      </Suspense>
+      </ErrorBoundary>
       {!onAdmin && <BottomNav />}
     </div>
   );

@@ -9,9 +9,14 @@ import { supabase } from "@/integrations/supabase/client";
 import { fetchPostsWithProfiles } from "@/lib/posts";
 import { useAuth } from "@/contexts/AuthContext";
 import { Loader2 } from "lucide-react";
+import { useSeo } from "@/hooks/useSeo";
 
 const Home = () => {
   const { user } = useAuth();
+  useSeo(
+    "Muslim Community — Your digital ummah",
+    "Connect with the Muslim community: posts, reels, jobs, donations, and real-time messaging.",
+  );
   const [posts, setPosts] = useState<PostWithProfile[]>([]);
   const [loading, setLoading] = useState(true);
 

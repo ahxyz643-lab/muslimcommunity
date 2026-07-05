@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, memo } from "react";
 import { Heart, MessageCircle, Repeat2, Bookmark, Share2, MoreHorizontal, Play, Pause, Trash2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
@@ -40,7 +40,7 @@ export interface PostWithProfile {
   } | null;
 }
 
-const PostCard = ({ post, onDelete }: { post: PostWithProfile; onDelete?: (id: string) => void }) => {
+const PostCardBase = ({ post, onDelete }: { post: PostWithProfile; onDelete?: (id: string) => void }) => {
   const { user } = useAuth();
   const { toast } = useToast();
   const navigate = useNavigate();
@@ -159,6 +159,8 @@ const PostCard = ({ post, onDelete }: { post: PostWithProfile; onDelete?: (id: s
             <img
               src={profile?.avatar_url || "https://i.pravatar.cc/150"}
               alt={profile?.display_name || "User"}
+              loading="lazy"
+              decoding="async"
               className="h-10 w-10 rounded-full object-cover ring-2 ring-border"
             />
             <div className="text-left">
@@ -201,7 +203,14 @@ const PostCard = ({ post, onDelete }: { post: PostWithProfile; onDelete?: (id: s
 
         {post.image_url && (
           <div className="px-4 pb-3">
-            <img src={post.image_url} alt="Post content" className="w-full rounded-xl object-cover" style={{ maxHeight: 400 }} />
+            <img
+              src={post.image_url}
+              alt="Post content"
+              loading="lazy"
+              decoding="async"
+              className="w-full rounded-xl object-cover"
+              style={{ maxHeight: 400 }}
+            />
           </div>
         )}
 
@@ -271,5 +280,13 @@ const PostCard = ({ post, onDelete }: { post: PostWithProfile; onDelete?: (id: s
     </>
   );
 };
+
+const PostCard = memo(PostCardBase, (a, b) =>
+  a.post.id === b.post.id &&
+  a.post.likes_count === b.post.likes_count &&
+  a.post.comments_count === b.post.comments_count &&
+  a.post.reposts_count === b.post.reposts_count &&
+  a.post.saves_count === b.post.saves_count,
+);
 
 export default PostCard;

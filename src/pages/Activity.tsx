@@ -1,4 +1,4 @@
-import { ArrowLeft, Heart, MessageCircle, UserPlus, Bookmark, Loader2 } from "lucide-react";
+import { ArrowLeft, Heart, MessageCircle, UserPlus, Bookmark, Loader2, Briefcase } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -68,7 +68,32 @@ const Activity = () => {
       case "comment": return <MessageCircle className="h-5 w-5 text-primary" />;
       case "follow": return <UserPlus className="h-5 w-5 text-primary" />;
       case "save": return <Bookmark className="h-5 w-5 text-accent" />;
+      case "job_application":
+      case "job_application_status":
+        return <Briefcase className="h-5 w-5 text-[#c9a84c]" />;
+      case "message": return <MessageCircle className="h-5 w-5 text-primary" />;
       default: return <Heart className="h-5 w-5 text-muted-foreground" />;
+    }
+  };
+
+  const openNotification = (n: any) => {
+    const d = n.data || {};
+    switch (n.type) {
+      case "message":
+        return navigate(d.conversation_id ? `/messages?c=${d.conversation_id}` : "/messages");
+      case "follow":
+        return d.actor_id ? navigate(`/user/${d.actor_id}`) : navigate("/activity");
+      case "job_application":
+        return navigate("/employer");
+      case "job_application_status":
+        return navigate("/jobs");
+      case "like":
+      case "comment":
+        if (d.reel_id) return navigate(`/reels?start=${d.reel_id}`);
+        if (d.post_id) return navigate(`/reels?start=${d.post_id}&kind=post`);
+        return;
+      default:
+        return;
     }
   };
 
@@ -92,14 +117,18 @@ const Activity = () => {
       ) : (
         <div className="divide-y divide-border">
           {notifications.map((n) => (
-            <div key={n.id} className={`flex items-start gap-3 px-4 py-3 ${!n.read ? "bg-primary/5" : ""}`}>
+            <button
+              key={n.id}
+              onClick={() => openNotification(n)}
+              className={`flex w-full items-start gap-3 px-4 py-3 text-left transition-colors hover:bg-secondary/40 ${!n.read ? "bg-primary/5" : ""}`}
+            >
               <div className="mt-0.5">{getIcon(n.type)}</div>
               <div className="flex-1">
                 <p className="text-sm text-foreground font-medium">{n.title}</p>
                 {n.body && <p className="text-xs text-muted-foreground mt-0.5">{n.body}</p>}
                 <p className="text-xs text-muted-foreground mt-1">{formatDistanceToNow(new Date(n.created_at), { addSuffix: true })}</p>
               </div>
-            </div>
+            </button>
           ))}
         </div>
       )}

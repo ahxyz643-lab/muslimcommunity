@@ -990,6 +990,7 @@ export type Database = {
         }
         Returns: boolean
       }
+      increment_reel_view: { Args: { _id: string }; Returns: undefined }
       is_admin_tier: { Args: { _user_id: string }; Returns: boolean }
       is_conversation_participant: {
         Args: { _conversation_id: string; _user_id: string }
