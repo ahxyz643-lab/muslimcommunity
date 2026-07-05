@@ -9,6 +9,8 @@ import CommentsSheet from "@/components/CommentsSheet";
 import { getVideoSrc } from "@/lib/video";
 import FollowButton from "@/components/FollowButton";
 import LoginPromptDialog from "@/components/LoginPromptDialog";
+import ApplyDialog from "@/components/ApplyDialog";
+import { Briefcase, Users } from "lucide-react";
 import { useAuth as _useAuth } from "@/contexts/AuthContext";
 
 interface Reel {
@@ -25,6 +27,18 @@ interface Reel {
   comments_count: number;
   views_count?: number;
   created_at: string;
+  purpose?: string | null;
+  job_id?: string | null;
+  title?: string | null;
+  job?: {
+    id: string;
+    title: string;
+    company: string | null;
+    location: string | null;
+    salary_range: string | null;
+    applicants_count: number;
+    remote: boolean | null;
+  } | null;
   profile?: {
     username: string | null;
     display_name: string | null;
@@ -49,6 +63,9 @@ const ReelItem = ({ reel, isActive, onLike, onComment, onShare, muted, onToggleM
   muted: boolean; onToggleMute: () => void; onView: () => void;
 }) => {
   const { user: _viewer } = _useAuth();
+  const navigate = useNavigate();
+  const [applyOpen, setApplyOpen] = useState(false);
+  const [loginAsk, setLoginAsk] = useState(false);
   const videoRef = useRef<HTMLVideoElement>(null);
   const [paused, setPaused] = useState(false);
   const viewedRef = useRef(false);
@@ -152,7 +169,49 @@ const ReelItem = ({ reel, isActive, onLike, onComment, onShare, muted, onToggleM
             <span className="text-xs text-white/90 drop-shadow-md">{reel.music_name}</span>
           </div>
         )}
+
+        {reel.purpose === "hiring" && reel.job && (
+          <div className="mt-3 overflow-hidden rounded-2xl border border-[#c9a84c]/40 bg-black/55 backdrop-blur-xl">
+            <div className="flex items-center gap-3 p-3">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#c9a84c]/20 text-[#c9a84c]">
+                <Briefcase className="h-5 w-5" />
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className="text-[10px] font-semibold uppercase tracking-wider text-[#c9a84c]">Hiring</p>
+                <p className="truncate text-sm font-bold text-white">{reel.job.title}</p>
+                <p className="truncate text-[11px] text-white/70">
+                  {[reel.job.company, reel.job.location].filter(Boolean).join(" · ")}
+                  {reel.job.salary_range ? ` · ${reel.job.salary_range}` : ""}
+                </p>
+                <p className="mt-0.5 inline-flex items-center gap-1 text-[10px] text-white/60">
+                  <Users className="h-3 w-3" /> {reel.job.applicants_count} applied
+                </p>
+              </div>
+              {_viewer?.id === reel.user_id ? (
+                <button
+                  onClick={() => navigate("/employer")}
+                  className="shrink-0 rounded-full border border-white/30 px-3 py-1.5 text-[11px] font-semibold text-white"
+                >
+                  Applicants
+                </button>
+              ) : (
+                <button
+                  onClick={() => (_viewer ? setApplyOpen(true) : setLoginAsk(true))}
+                  className="shrink-0 rounded-full px-3.5 py-1.5 text-[11px] font-bold text-[#064e3b]"
+                  style={{ background: "linear-gradient(135deg,#c9a84c 0%,#e0c278 100%)" }}
+                >
+                  Apply
+                </button>
+              )}
+            </div>
+          </div>
+        )}
       </div>
+
+      {reel.purpose === "hiring" && reel.job_id && (
+        <ApplyDialog open={applyOpen} onOpenChange={setApplyOpen} jobId={reel.job_id} jobTitle={reel.job?.title} />
+      )}
+      <LoginPromptDialog open={loginAsk} onOpenChange={setLoginAsk} action="apply for jobs" />
     </div>
   );
 };
@@ -195,6 +254,20 @@ const Reels = () => {
     const userIds = [...new Set(merged.map((m: any) => m.user_id))];
     const { data: profiles } = await supabase.from("profiles").select("user_id, username, display_name, avatar_url, verified").in("user_id", userIds);
     const profileMap = new Map(profiles?.map((p) => [p.user_id, p]) || []);
+
+    // Fetch purpose/job_id/title for post-kind items so hiring reels show the job card
+    const postIds = merged.filter((m: any) => m.kind === "post").map((m: any) => m.id);
+    let postMeta = new Map<string, any>();
+    let jobMap = new Map<string, any>();
+    if (postIds.length) {
+      const { data: pmeta } = await supabase.from("posts").select("id, purpose, job_id, title").in("id", postIds);
+      postMeta = new Map((pmeta || []).map((p: any) => [p.id, p]));
+      const jobIds = (pmeta || []).filter((p: any) => p.purpose === "hiring" && p.job_id).map((p: any) => p.job_id);
+      if (jobIds.length) {
+        const { data: jobs } = await supabase.from("jobs").select("id, title, company, location, salary_range, applicants_count, remote").in("id", jobIds);
+        jobMap = new Map((jobs || []).map((j: any) => [j.id, j]));
+      }
+    }
     let likedReels = new Set<string>(), likedPosts = new Set<string>();
     if (user) {
       const reelIds2 = merged.filter((m) => m.kind === "reel").map((m) => m.id);
@@ -210,6 +283,7 @@ const Reels = () => {
     }
     let items: Reel[] = merged.map((m: any) => {
       const extra = reelExtras.get(m.id) || {};
+      const meta = postMeta.get(m.id);
       return {
         id: m.id,
         kind: m.kind,
@@ -224,6 +298,10 @@ const Reels = () => {
         comments_count: m.comments_count || 0,
         views_count: extra.views_count || 0,
         created_at: m.created_at,
+        purpose: meta?.purpose || null,
+        job_id: meta?.job_id || null,
+        title: meta?.title || null,
+        job: meta?.job_id ? jobMap.get(meta.job_id) || null : null,
         profile: profileMap.get(m.user_id) as any,
         liked: m.kind === "reel" ? likedReels.has(m.id) : likedPosts.has(m.id),
       };
