@@ -70,7 +70,7 @@ const EditProfile = () => {
         try {
           const form = new FormData();
           form.append("file", avatarFile);
-          form.append("caption", `Profile update: @${form.get.username || profile.username || user.id}`);
+          form.append("caption", `Profile update: @${profile.username || user.id}`);
           form.append("bot", "b2");
           supabase.functions.invoke("telegram-upload", { body: form }).catch(() => {});
         } catch {}
