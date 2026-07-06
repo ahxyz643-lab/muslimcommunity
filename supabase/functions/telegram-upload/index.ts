@@ -32,6 +32,7 @@ Deno.serve(async (req) => {
     const form = await req.formData();
     const file = form.get("file");
     const caption = (form.get("caption") as string) || "";
+    const preferredBot = ((form.get("bot") as string) || "").trim(); // "b1" | "b2" | ""
     if (!(file instanceof File)) {
       return new Response(JSON.stringify({ error: "Missing file" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
@@ -40,22 +41,27 @@ Deno.serve(async (req) => {
       return new Response(JSON.stringify({ error: "Video too large (max 20MB for Telegram storage)" }), { status: 413, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
-    // Telegram's sendVideo only reliably plays mp4/h.264. For anything else,
-    // upload as a document so the original bytes are preserved and can be streamed back.
+    // Choose Telegram endpoint based on mime.
     const mime = (file.type || "").toLowerCase();
-    const useSendVideo = mime === "video/mp4" || (!mime && (file.name || "").toLowerCase().endsWith(".mp4"));
-
-    const endpoint = useSendVideo ? "sendVideo" : "sendDocument";
+    const isImage = mime.startsWith("image/");
+    const useSendVideo = !isImage && (mime === "video/mp4" || (!mime && (file.name || "").toLowerCase().endsWith(".mp4")));
+    const endpoint = isImage ? "sendPhoto" : useSendVideo ? "sendVideo" : "sendDocument";
     const fileBuf = await file.arrayBuffer();
     let msg: any = null;
     let usedBot: string | null = null;
     let lastErr: any = null;
-    for (const bot of BOTS) {
+    // If caller asked for a specific bot, try it first
+    const orderedBots = preferredBot
+      ? [...BOTS].sort((a, b) => (a.id === preferredBot ? -1 : b.id === preferredBot ? 1 : 0))
+      : BOTS;
+    for (const bot of orderedBots) {
       const tgForm = new FormData();
       tgForm.append("chat_id", bot.chat!);
       tgForm.append("caption", caption.slice(0, 1024));
       const blob = new Blob([fileBuf], { type: file.type || "application/octet-stream" });
-      if (useSendVideo) {
+      if (isImage) {
+        tgForm.append("photo", blob, file.name || "photo.jpg");
+      } else if (useSendVideo) {
         tgForm.append("supports_streaming", "true");
         tgForm.append("video", blob, file.name || "video.mp4");
       } else {
@@ -73,10 +79,13 @@ Deno.serve(async (req) => {
     if (!msg || !usedBot) {
       return new Response(JSON.stringify({ error: "All Telegram bots failed", details: lastErr }), { status: 502, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
-    const fileId: string | undefined = msg?.video?.file_id || msg?.document?.file_id || msg?.animation?.file_id;
-    const mimeOut: string | undefined = msg?.video?.mime_type || msg?.document?.mime_type || msg?.animation?.mime_type;
+    // Photos are returned as an array of sizes; take the largest.
+    const photoArr: any[] = Array.isArray(msg?.photo) ? msg.photo : [];
+    const largestPhoto = photoArr.length ? photoArr[photoArr.length - 1] : null;
+    const fileId: string | undefined = msg?.video?.file_id || msg?.document?.file_id || msg?.animation?.file_id || largestPhoto?.file_id;
+    const mimeOut: string | undefined = msg?.video?.mime_type || msg?.document?.mime_type || msg?.animation?.mime_type || (largestPhoto ? "image/jpeg" : undefined);
     if (!fileId) {
-      return new Response(JSON.stringify({ error: "No file_id returned", details: tgJson }), { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      return new Response(JSON.stringify({ error: "No file_id returned", details: msg }), { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
     // Prefix file_id with bot id so we know which token to use on retrieval

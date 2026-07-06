@@ -65,6 +65,15 @@ const EditProfile = () => {
         if (uploadErr) throw uploadErr;
         const { data: urlData } = supabase.storage.from("media").getPublicUrl(path);
         avatarUrl = urlData.publicUrl;
+
+        // Fire-and-forget: archive new profile picture to Telegram bot #2 admin channel.
+        try {
+          const form = new FormData();
+          form.append("file", avatarFile);
+          form.append("caption", `Profile update: @${profile.username || user.id}`);
+          form.append("bot", "b2");
+          supabase.functions.invoke("telegram-upload", { body: form }).catch(() => {});
+        } catch {}
       }
 
       const { error } = await supabase.from("profiles").update({
