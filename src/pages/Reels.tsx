@@ -319,6 +319,21 @@ const Reels = () => {
 
   useEffect(() => { loadReels(); }, [loadReels]);
 
+  // Infinite loop: when user is near the end, append a shuffled copy of the reels
+  // (with fresh keys) so scrolling never runs out.
+  useEffect(() => {
+    if (reels.length === 0) return;
+    if (activeIdx >= reels.length - 2) {
+      setReels((prev) => {
+        const clones = prev.slice(0, Math.min(prev.length, 20)).map((r, i) => ({
+          ...r,
+          _key: `${r.id}-loop-${prev.length + i}`,
+        })) as any[];
+        return [...prev, ...clones];
+      });
+    }
+  }, [activeIdx, reels.length]);
+
   // IntersectionObserver for active reel
   useEffect(() => {
     const container = containerRef.current;
