@@ -115,13 +115,13 @@ const Activity = () => {
   const { data: loginHistory = [], isLoading: loginLoading } = useQuery({
     queryKey: ["login-history", user?.id],
     queryFn: async () => {
-      const { data } = await supabase
+      const { data } = await (supabase as any)
         .from("admin_logs")
         .select("*")
         .eq("actor_id", user!.id)
         .order("created_at", { ascending: false })
         .limit(50);
-      return data || [];
+      return (data as any[]) || [];
     },
     enabled: !!user && tab === "logins",
   });
