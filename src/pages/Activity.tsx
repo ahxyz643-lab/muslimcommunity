@@ -101,13 +101,13 @@ const Activity = () => {
   const { data: watchHistory = [], isLoading: watchLoading } = useQuery({
     queryKey: ["watch-history", user?.id],
     queryFn: async () => {
-      const { data } = await supabase
-        .from("reel_views" as any)
+      const { data } = await (supabase as any)
+        .from("reel_views")
         .select("id, reel_id, viewed_at, reels:reel_id(id, caption, thumbnail_url, user_id, profiles:user_id(username, avatar_url))")
         .eq("user_id", user!.id)
         .order("viewed_at", { ascending: false })
         .limit(50);
-      return (data as any) || [];
+      return (data as any[]) || [];
     },
     enabled: !!user && tab === "watch",
   });
