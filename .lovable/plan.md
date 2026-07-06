@@ -1,63 +1,79 @@
-# Phase 4 — Performance, Notifications, Admin polish, QA
+# Phase 5 — Stories, Reels UX, Settings Wiring & QA
 
-Ship the last major pass: make the app fast, make notifications real, sharpen admin tooling, and lock down obvious QA gaps.
+Scope is large — grouping into 4 tracks. All backend changes go through one migration; frontend wired after approval.
 
-## 1. Performance
+## 1. Stories (24h, Telegram-backed)
 
-**Feed & Reels**
-- Add DB indexes: `posts(purpose, created_at desc)`, `posts(user_id, created_at desc)`, `reels(created_at desc)`, `job_applications(job_id, status)`, `notifications(user_id, read, created_at desc)`.
-- `PostCard`: memoize with `React.memo`, lazy-mount `CommentsSheet` / `HiringInlineCard` only when needed (already lazy for comments; make hiring card lazy via dynamic import).
-- Home feed: paginate with `range()` (20 per page) + IntersectionObserver "load more" instead of one big fetch.
-- Reels: keep only ±2 videos mounted, unload the rest (`<video>` `preload="none"` for offscreen); reuse existing IntersectionObserver.
-- Images: add `loading="lazy"` + `decoding="async"` on avatars and post images sitewide.
+- Make `StoriesBar` interactive:
+  - "Your Story" tile opens a picker → upload image/video via `telegram-upload` edge function using **bot #2** (`TELEGRAM_BOT_TOKEN_2` / `TELEGRAM_CHANNEL_ID_2`) so it's isolated from posts/reels.
+  - Insert row into `stories` (already exists) with `expires_at = now() + 24h`, `telegram_file_id`, `media_url`.
+  - Tapping another user's ring opens a full-screen `StoryViewer` (tap → next, swipe down → close, auto-advance 5s, progress bars).
+- Only show rings for users who have a non-expired story.
+- Add cron-safe cleanup: `stories` older than 24h hidden by query filter (`expires_at > now()`); existing `cleanup_expired_stories()` function already handles deletion.
+- New edge function param: `telegram-upload` accepts `?bot=2` to route to second bot. Falls back to bot #1 if not specified.
 
-**Bundle**
-- Route-level `React.lazy` for `Admin`, `CreatorStudio`, `Employer`, `Donations`, `CreatePost`, `CreateReel`, `Reels` with `Suspense` fallback (spinner).
-- Drop unused `date-fns` locales; keep default.
+## 2. Profile ID image → Telegram
 
-## 2. Notifications (real, not just DB rows)
+- When user updates avatar in `EditProfile`, also POST the new avatar to Telegram (bot #2, channel #2) with caption `Profile update: @username` — so admin channel gets a copy of every profile picture.
+- Non-blocking: fire-and-forget, no UX delay if it fails.
 
-- New `NotificationsBell` in `TopBar` showing unread count badge; subscribes via Realtime to `notifications where user_id=me`.
-- Enable Realtime on `notifications`: `ALTER PUBLICATION supabase_realtime ADD TABLE public.notifications;`.
-- `Activity` page: mark-as-read on open (`update notifications set read=true where user_id=me and read=false`), tap-through routing:
-  - `like` / `comment` on post → `/reels?start=<post_id>&kind=post` if video else scroll to post.
-  - `reel` events → `/reels?start=<reel_id>`.
-  - `follow` → `/user/<actor_id>`.
-  - `message` → `/messages?c=<conversation_id>`.
-  - `job_application` → `/employer`.
-  - `job_application_status` → `/jobs`.
-- Toast on incoming realtime notification while app is open.
+## 3. Reels UX
 
-## 3. Admin polish
+- **Infinite scroll**: paginate `reels` in `Reels.tsx` (10 per page). IntersectionObserver on the last item → fetch next page and append. Loop back to start when exhausted so it *feels* infinite.
+- **Back button**: floating top-left arrow (`ArrowLeft`) → `navigate(-1)`. Positioned over video with subtle gradient bg for contrast.
+- **Hide bottom nav**: `BottomNav` currently rendered on all non-admin routes. Add `/reels` to the hide list in `App.tsx`.
 
-- `AdminDashboard`: live counters (users, posts, reels, pending reports, pending job applications, open support tickets) with skeletons.
-- `AdminReports`: quick actions — hide post, ban user (sets `profiles.banned=true`), mark resolved. Uses existing `guard_profile_sensitive` (admin-only).
-- `AdminJobs`: list all jobs + applicants count, toggle `jobs.status`, delete.
-- `AdminUsers`: search by username/email, verify/unverify, ban/unban, role assign (writes `user_roles`).
-- All admin writes go through existing RLS + `has_role('admin')` — no new edge functions needed.
+## 4. Settings — wire everything
 
-## 4. QA & polish
+Currently stubs in `Settings.tsx`. Make functional:
 
-- Fix Reels: `views_count` update can race; switch to atomic `rpc('increment_reel_view', { _id })` (add small SECURITY DEFINER function).
-- `ApplyDialog`: block duplicate apply (`select 1 from job_applications where job_id=? and applicant_id=?`) → toast "You already applied".
-- `HiringInlineCard`: subscribe to `job_applications` inserts for that job so `applicants_count` updates live for the owner.
-- Empty states: Jobs, Employer, Activity, Messages get proper illustrations + CTA.
-- Error boundaries around `Home`, `Reels`, `Admin`.
-- SEO: per-route `<title>` / `<meta description>` via a tiny `useSeo(title, desc)` hook applied on Home, Jobs, Reels, Profile, Auth.
-- Accessibility: `aria-label` on all icon-only buttons in `PostCard`, `Reels`, `BottomNav`, `TopBar`.
+- **Privacy & Security** → new page `/settings/privacy` with:
+  - Private account toggle (writes `profiles.is_private` — add column)
+  - Show activity status toggle (`profiles.show_activity`)
+  - Blocked users list (reads from a new `blocks` table)
+  - Change password (Supabase `updateUser({ password })`)
+- **Notifications** → `/settings/notifications`:
+  - Toggles for likes / comments / follows / messages / job updates (writes `profiles.notif_prefs jsonb`)
+  - Server-side: `notify_*` triggers check `notif_prefs` before insert
+- **Account Activity** → merge Activity page:
+  - Tab 1: Notifications (current)
+  - Tab 2: Watch History (reels the user watched — new `reel_views` table)
+  - Tab 3: Login History (from `admin_logs` filtered to self, or new `auth_events`)
+- **Help & Support** → `/settings/support`:
+  - Form that inserts into existing `support_tickets` table
+  - List user's past tickets with status
+- Remove the "Admin Panel" and "Employer Dashboard" entries for non-admins/non-employers (role-gate visibility).
 
-## 5. Out of scope (later phase)
+## 5. End-to-end QA sweep
 
-- Payments / paid job boosts.
-- Push notifications (web-push) — only in-app + realtime for now.
-- Video transcoding pipeline.
-- Full i18n beyond current translation system.
+- Verify all lazy routes load without console errors
+- Check RLS: new tables (`blocks`, `reel_views`) get PERMISSIVE policies + GRANTs
+- Fix any icon-only buttons missing `aria-label`
+- Ensure hidden zero counts still enforced
+- Test story upload flow with real image
+- Test reels infinite scroll doesn't leak video elements
 
-## Technical notes
+## Technical Details
 
-- One migration: indexes + realtime publication + `increment_reel_view` function.
-- New files: `src/components/NotificationsBell.tsx`, `src/hooks/useSeo.ts`, `src/components/ErrorBoundary.tsx`.
-- Touched: `App.tsx` (lazy routes + ErrorBoundary), `TopBar.tsx`, `Activity.tsx`, `Home.tsx`, `Reels.tsx`, `PostCard.tsx`, `HiringInlineCard.tsx`, `ApplyDialog.tsx`, admin pages listed above.
-- No new secrets, no edge functions.
+**Migration** (single file):
+- `ALTER TABLE profiles ADD is_private bool DEFAULT false, show_activity bool DEFAULT true, notif_prefs jsonb DEFAULT '{"likes":true,"comments":true,"follows":true,"messages":true,"jobs":true}'`
+- `CREATE TABLE blocks (blocker_id, blocked_id, created_at)` + RLS + GRANTs
+- `CREATE TABLE reel_views (user_id, reel_id, viewed_at)` + RLS + GRANTs
+- Update `notify_*` functions to check `notif_prefs`
 
-Approve to start implementation.
+**Edge function edit**: `telegram-upload/index.ts` — add `bot` field in FormData, route to matching bot.
+
+**New pages**: `PrivacySettings.tsx`, `NotificationSettings.tsx`, `HelpSupport.tsx`, `StoryViewer.tsx`, `StoryComposer.tsx`.
+
+**Touched**: `App.tsx` (routes + BottomNav hide), `Settings.tsx` (real routes, role-gated items), `StoriesBar.tsx` (interactive), `EditProfile.tsx` (Telegram avatar copy), `Reels.tsx` (infinite + back + no nav), `Activity.tsx` (tabs).
+
+## Out of scope
+
+- Story replies / reactions
+- Watch-history export
+- Push notifications
+- Story highlights (permanent stories on profile)
+
+---
+
+Approve to proceed. Given the size, I'll implement in this order: **migration → stories → reels UX → settings pages → QA sweep**, and after each track I'll pause briefly so you can spot-check.

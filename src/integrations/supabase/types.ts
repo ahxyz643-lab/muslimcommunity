@@ -65,6 +65,27 @@ export type Database = {
         }
         Relationships: []
       }
+      blocks: {
+        Row: {
+          blocked_id: string
+          blocker_id: string
+          created_at: string
+          id: string
+        }
+        Insert: {
+          blocked_id: string
+          blocker_id: string
+          created_at?: string
+          id?: string
+        }
+        Update: {
+          blocked_id?: string
+          blocker_id?: string
+          created_at?: string
+          id?: string
+        }
+        Relationships: []
+      }
       call_logs: {
         Row: {
           call_type: string
@@ -600,8 +621,11 @@ export type Database = {
           followers_count: number
           following_count: number
           id: string
+          is_private: boolean
           last_seen: string | null
+          notif_prefs: Json
           posts_count: number
+          show_activity: boolean
           updated_at: string
           user_id: string
           username: string | null
@@ -616,8 +640,11 @@ export type Database = {
           followers_count?: number
           following_count?: number
           id?: string
+          is_private?: boolean
           last_seen?: string | null
+          notif_prefs?: Json
           posts_count?: number
+          show_activity?: boolean
           updated_at?: string
           user_id: string
           username?: string | null
@@ -632,8 +659,11 @@ export type Database = {
           followers_count?: number
           following_count?: number
           id?: string
+          is_private?: boolean
           last_seen?: string | null
+          notif_prefs?: Json
           posts_count?: number
+          show_activity?: boolean
           updated_at?: string
           user_id?: string
           username?: string | null
@@ -695,6 +725,35 @@ export type Database = {
         Relationships: [
           {
             foreignKeyName: "reel_likes_reel_id_fkey"
+            columns: ["reel_id"]
+            isOneToOne: false
+            referencedRelation: "reels"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      reel_views: {
+        Row: {
+          id: string
+          reel_id: string
+          user_id: string
+          viewed_at: string
+        }
+        Insert: {
+          id?: string
+          reel_id: string
+          user_id: string
+          viewed_at?: string
+        }
+        Update: {
+          id?: string
+          reel_id?: string
+          user_id?: string
+          viewed_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "reel_views_reel_id_fkey"
             columns: ["reel_id"]
             isOneToOne: false
             referencedRelation: "reels"
