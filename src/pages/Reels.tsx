@@ -420,7 +420,7 @@ const Reels = () => {
           style={{ scrollbarWidth: "none" }}
         >
           {reels.map((reel, idx) => (
-            <div key={reel.id} data-reel data-idx={idx} className="h-full w-full">
+            <div key={(reel as any)._key || `${reel.id}-${idx}`} data-reel data-idx={idx} className="h-full w-full">
               <ReelItem
                 reel={reel}
                 isActive={idx === activeIdx}
