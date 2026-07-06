@@ -16,6 +16,8 @@ const BottomNav = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
   const guestGated = new Set(["/create", "/profile"]);
+  // Reels is immersive fullscreen — bottom nav ruins the view.
+  if (location.pathname.startsWith("/reels")) return null;
   const go = (path: string) => {
     if (!user && guestGated.has(path)) { navigate("/auth"); return; }
     navigate(path);
