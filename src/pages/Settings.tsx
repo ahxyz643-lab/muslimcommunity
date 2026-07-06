@@ -4,11 +4,13 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useTheme } from "@/contexts/ThemeContext";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { useAdminRole } from "@/hooks/useAdminRole";
 
 const Settings = () => {
   const navigate = useNavigate();
   const { user, signOut } = useAuth();
   const { theme, setTheme } = useTheme();
+  const { hasAccess } = useAdminRole();
 
   const { data: profile } = useQuery({
     queryKey: ["profile", user?.id],
@@ -25,23 +27,35 @@ const Settings = () => {
     { value: "system", icon: Monitor, label: "Auto" },
   ];
 
+  // Detect employer role by presence of any jobs posted by user
+  const { data: isEmployer = false } = useQuery({
+    queryKey: ["is-employer", user?.id],
+    queryFn: async () => {
+      const { count } = await supabase.from("jobs").select("id", { count: "exact", head: true }).eq("poster_id", user!.id);
+      return (count || 0) > 0;
+    },
+    enabled: !!user,
+  });
+
+  const supportItems: { icon: any; label: string; action: () => void }[] = [
+    { icon: HelpCircle, label: "Help & Support", action: () => navigate("/settings/support") },
+  ];
+  if (isEmployer) supportItems.push({ icon: Briefcase, label: "Employer Dashboard", action: () => navigate("/employer") });
+  if (hasAccess) supportItems.push({ icon: Crown, label: "Admin Panel", action: () => navigate("/admin") });
+
   const sections = [
     {
       title: "Account",
       items: [
         { icon: User, label: "Edit Profile", action: () => navigate("/edit-profile") },
         { icon: Activity, label: "Account Activity", action: () => navigate("/activity") },
-        { icon: Shield, label: "Privacy & Security", action: () => {} },
-        { icon: Bell, label: "Notifications", action: () => navigate("/activity") },
+        { icon: Shield, label: "Privacy & Security", action: () => navigate("/settings/privacy") },
+        { icon: Bell, label: "Notifications", action: () => navigate("/settings/notifications") },
       ],
     },
     {
       title: "Support",
-      items: [
-        { icon: HelpCircle, label: "Help & Support", action: () => {} },
-        { icon: Briefcase, label: "Employer Dashboard", action: () => navigate("/employer") },
-        { icon: Crown, label: "Admin Panel", action: () => navigate("/admin") },
-      ],
+      items: supportItems,
     },
   ];
 
