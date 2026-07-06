@@ -24,6 +24,9 @@ import NotFound from "@/pages/NotFound";
 
 // Lazy heavier routes to shrink initial bundle
 const CreatePost = lazy(() => import("@/pages/CreatePost"));
+const PrivacySettings = lazy(() => import("@/pages/PrivacySettings"));
+const NotificationSettings = lazy(() => import("@/pages/NotificationSettings"));
+const HelpSupport = lazy(() => import("@/pages/HelpSupport"));
 const CreatorStudio = lazy(() => import("@/pages/CreatorStudio"));
 const Employer = lazy(() => import("@/pages/Employer"));
 const Reels = lazy(() => import("@/pages/Reels"));
@@ -85,6 +88,9 @@ const AppRoutes = () => {
         <Route path="/user/:userId" element={<UserProfilePage />} />
         <Route path="/edit-profile" element={<ProtectedRoute><EditProfile /></ProtectedRoute>} />
         <Route path="/settings" element={<ProtectedRoute><Settings /></ProtectedRoute>} />
+        <Route path="/settings/privacy" element={<ProtectedRoute><PrivacySettings /></ProtectedRoute>} />
+        <Route path="/settings/notifications" element={<ProtectedRoute><NotificationSettings /></ProtectedRoute>} />
+        <Route path="/settings/support" element={<ProtectedRoute><HelpSupport /></ProtectedRoute>} />
         <Route path="/activity" element={<ProtectedRoute><Activity /></ProtectedRoute>} />
         <Route path="/creator-studio" element={<ProtectedRoute><CreatorStudio /></ProtectedRoute>} />
         <Route path="/employer" element={<ProtectedRoute><Employer /></ProtectedRoute>} />
