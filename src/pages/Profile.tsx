@@ -202,6 +202,10 @@ const Profile = () => {
         )}
       </div>
     </div>
+      {followList && user && (
+        <FollowListSheet userId={user.id} mode={followList} onClose={() => setFollowList(null)} />
+      )}
+    </div>
   );
 };
 
