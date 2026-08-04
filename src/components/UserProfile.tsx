@@ -7,12 +7,14 @@ import { supabase } from "@/integrations/supabase/client";
 import { fetchPostsWithProfiles } from "@/lib/posts";
 import PostCard from "@/components/PostCard";
 import VerifiedBadge from "@/components/VerifiedBadge";
+import FollowListSheet from "@/components/FollowListSheet";
 
 const UserProfile = ({ userId }: { userId: string }) => {
   const { user } = useAuth();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const isOwnProfile = user?.id === userId;
+  const [followList, setFollowList] = useState<null | "followers" | "following">(null);
 
   const { data: profile, isLoading } = useQuery({
     queryKey: ["profile", userId],
@@ -93,14 +95,14 @@ const UserProfile = ({ userId }: { userId: string }) => {
             <span className="block text-lg font-bold text-foreground">{posts.length}</span>
             <span className="text-xs text-muted-foreground">Posts</span>
           </div>
-          <div className="text-center">
+          <button type="button" onClick={() => setFollowList("followers")} className="text-center transition-opacity hover:opacity-80">
             <span className="block text-lg font-bold text-foreground">{profile?.followers_count || 0}</span>
             <span className="text-xs text-muted-foreground">Followers</span>
-          </div>
-          <div className="text-center">
+          </button>
+          <button type="button" onClick={() => setFollowList("following")} className="text-center transition-opacity hover:opacity-80">
             <span className="block text-lg font-bold text-foreground">{profile?.following_count || 0}</span>
             <span className="text-xs text-muted-foreground">Following</span>
-          </div>
+          </button>
         </div>
 
         {!isOwnProfile && user && (
@@ -136,6 +138,9 @@ const UserProfile = ({ userId }: { userId: string }) => {
           <div className="divide-y divide-border">{posts.map((p) => <PostCard key={p.id} post={p} />)}</div>
         )}
       </div>
+      {followList && (
+        <FollowListSheet userId={userId} mode={followList} onClose={() => setFollowList(null)} />
+      )}
     </div>
   );
 };
