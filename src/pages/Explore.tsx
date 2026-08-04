@@ -21,9 +21,11 @@ const Explore = () => {
   const navigate = useNavigate();
 
   const { data: profiles = [] } = useQuery({
-    queryKey: ["suggested-profiles"],
+    queryKey: ["suggested-profiles", user?.id],
     queryFn: async () => {
-      const { data } = await supabase.from("profiles").select("*").neq("user_id", user?.id || "").limit(10);
+      let q = supabase.from("profiles").select("*").limit(10);
+      if (user?.id) q = q.neq("user_id", user.id);
+      const { data } = await q;
       return data || [];
     },
   });
