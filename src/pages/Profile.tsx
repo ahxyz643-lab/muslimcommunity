@@ -7,6 +7,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { fetchPostsWithProfiles } from "@/lib/posts";
 import PostCard from "@/components/PostCard";
 import VerifiedBadge from "@/components/VerifiedBadge";
+import FollowListSheet from "@/components/FollowListSheet";
 import heroPattern from "@/assets/hero-pattern.jpg";
 import { getVideoSrc } from "@/lib/video";
 
@@ -14,6 +15,7 @@ const Profile = () => {
   const { user } = useAuth();
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState("posts");
+  const [followList, setFollowList] = useState<null | "followers" | "following">(null);
 
   const { data: profile, isLoading: profileLoading } = useQuery({
     queryKey: ["profile", user?.id],
@@ -121,15 +123,21 @@ const Profile = () => {
         </div>
 
         <div className="mt-4 flex gap-6">
-          {[
-            { label: "Posts", value: userPosts.length },
-            { label: "Followers", value: followersCount },
-            { label: "Following", value: followingCount },
-          ].map(({ label, value }) => (
-            <div key={label} className="text-center">
+          {([
+            { label: "Posts", value: userPosts.length, mode: null },
+            { label: "Followers", value: followersCount, mode: "followers" as const },
+            { label: "Following", value: followingCount, mode: "following" as const },
+          ]).map(({ label, value, mode }) => (
+            <button
+              key={label}
+              type="button"
+              disabled={!mode}
+              onClick={() => mode && setFollowList(mode)}
+              className={`text-center ${mode ? "transition-opacity hover:opacity-80" : "cursor-default"}`}
+            >
               <span className="block text-lg font-bold text-foreground">{value >= 1000 ? (value / 1000).toFixed(1) + "K" : value}</span>
               <span className="text-xs text-muted-foreground">{label}</span>
-            </div>
+            </button>
           ))}
         </div>
 
