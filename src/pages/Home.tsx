@@ -1,4 +1,4 @@
-import { useEffect, useState, Fragment } from "react";
+import { useEffect, useState, useRef, useCallback, Fragment } from "react";
 import TopBar from "@/components/TopBar";
 import PostCard, { PostWithProfile } from "@/components/PostCard";
 import ReelsPreviewBar from "@/components/ReelsPreviewBar";
@@ -11,6 +11,8 @@ import { useAuth } from "@/contexts/AuthContext";
 import { Loader2 } from "lucide-react";
 import { useSeo } from "@/hooks/useSeo";
 
+const PAGE_SIZE = 15;
+
 const Home = () => {
   const { user } = useAuth();
   useSeo(
@@ -19,23 +21,55 @@ const Home = () => {
   );
   const [posts, setPosts] = useState<PostWithProfile[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [hasMore, setHasMore] = useState(true);
+  const offsetRef = useRef(0);
+  const sentinelRef = useRef<HTMLDivElement | null>(null);
 
-  const loadPosts = async () => {
+  const fetchPage = useCallback(async (offset: number): Promise<PostWithProfile[]> => {
     if (user) {
-      const { data } = await supabase.rpc("get_personalized_feed", { _user_id: user.id, _limit: 60, _offset: 0, _videos_only: false });
-      const posts = (data || []).filter((r: any) => r.kind === "post");
-      const userIds = [...new Set(posts.map((p: any) => p.user_id))] as string[];
+      const { data } = await supabase.rpc("get_personalized_feed", { _user_id: user.id, _limit: PAGE_SIZE, _offset: offset, _videos_only: false });
+      const rows = (data || []).filter((r: any) => r.kind === "post");
+      const userIds = [...new Set(rows.map((p: any) => p.user_id))] as string[];
+      if (userIds.length === 0) return [];
       const { data: profiles } = await supabase.from("profiles").select("user_id, username, display_name, avatar_url, verified").in("user_id", userIds);
       const map = new Map(profiles?.map((p) => [p.user_id, p]) || []);
-      setPosts(posts.map((p: any) => ({ ...p, language: null, updated_at: p.created_at, profiles: map.get(p.user_id) || null })));
-    } else {
-      const result = await fetchPostsWithProfiles(supabase.from("posts").select("*").order("created_at", { ascending: false }));
-      setPosts(result);
+      return rows.map((p: any) => ({ ...p, language: null, updated_at: p.created_at, profiles: map.get(p.user_id) || null }));
     }
+    return fetchPostsWithProfiles(
+      supabase.from("posts").select("*").order("created_at", { ascending: false }).range(offset, offset + PAGE_SIZE - 1),
+    );
+  }, [user?.id]);
+
+  const loadPosts = useCallback(async () => {
+    const first = await fetchPage(0);
+    offsetRef.current = first.length;
+    setHasMore(first.length >= PAGE_SIZE);
+    setPosts(first);
     setLoading(false);
-  };
+  }, [fetchPage]);
+
+  const loadMore = useCallback(async () => {
+    if (loadingMore || !hasMore) return;
+    setLoadingMore(true);
+    const next = await fetchPage(offsetRef.current);
+    if (next.length === 0) {
+      setHasMore(false);
+    } else {
+      offsetRef.current += next.length;
+      setPosts((prev) => {
+        const seen = new Set(prev.map((p) => p.id));
+        return [...prev, ...next.filter((p) => !seen.has(p.id))];
+      });
+      if (next.length < PAGE_SIZE) setHasMore(false);
+    }
+    setLoadingMore(false);
+  }, [fetchPage, hasMore, loadingMore]);
 
   useEffect(() => {
+    setLoading(true);
+    setHasMore(true);
+    offsetRef.current = 0;
     loadPosts();
     const channel = supabase
       .channel("posts-feed")
@@ -43,6 +77,17 @@ const Home = () => {
       .subscribe();
     return () => { supabase.removeChannel(channel); };
   }, [user?.id]);
+
+  useEffect(() => {
+    const el = sentinelRef.current;
+    if (!el || loading) return;
+    const io = new IntersectionObserver(
+      (entries) => { if (entries[0].isIntersecting) loadMore(); },
+      { rootMargin: "600px" },
+    );
+    io.observe(el);
+    return () => io.disconnect();
+  }, [loadMore, loading]);
 
   const handleDelete = (id: string) => setPosts((prev) => prev.filter((p) => p.id !== id));
 
@@ -77,6 +122,15 @@ const Home = () => {
               )}
             </Fragment>
           ))}
+        </div>
+      )}
+      {!loading && posts.length > 0 && (
+        <div ref={sentinelRef} className="flex items-center justify-center py-8">
+          {loadingMore ? (
+            <Loader2 className="h-6 w-6 animate-spin text-primary" />
+          ) : !hasMore ? (
+            <p className="text-xs text-muted-foreground">You're all caught up</p>
+          ) : null}
         </div>
       )}
     </div>
