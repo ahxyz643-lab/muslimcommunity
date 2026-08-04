@@ -2,6 +2,7 @@ import { useEffect, useState, useRef, useCallback, Fragment } from "react";
 import TopBar from "@/components/TopBar";
 import PostCard, { PostWithProfile } from "@/components/PostCard";
 import ReelsPreviewBar from "@/components/ReelsPreviewBar";
+import StoriesBar from "@/components/StoriesBar";
 import GuestHero from "@/components/GuestHero";
 import JobInlineCard from "@/components/JobInlineCard";
 import DonationInlineCard from "@/components/DonationInlineCard";
@@ -101,6 +102,7 @@ const Home = () => {
           }
         />
       )}
+      <StoriesBar />
       <ReelsPreviewBar />
       {loading ? (
         <div className="flex items-center justify-center py-20"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>

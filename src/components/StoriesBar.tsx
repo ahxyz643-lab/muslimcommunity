@@ -10,7 +10,7 @@ type StoryProfile = {
   username: string | null;
   display_name: string | null;
   avatar_url: string | null;
-  stories: { id: string; media_url: string | null; media_type: string | null; created_at: string }[];
+  stories: { id: string; media_url: string | null; media_type: string; created_at: string }[];
 };
 
 const StoriesBar = () => {
@@ -27,7 +27,7 @@ const StoriesBar = () => {
       const nowIso = new Date().toISOString();
       const { data: stories } = await supabase
         .from("stories")
-        .select("id, user_id, media_url, media_type, created_at, expires_at")
+        .select("id, user_id, image_url, caption, created_at, expires_at")
         .gt("expires_at", nowIso)
         .order("created_at", { ascending: true });
       if (!stories || stories.length === 0) return [];
@@ -40,9 +40,12 @@ const StoriesBar = () => {
       for (const p of profiles || []) {
         byUser.set(p.user_id, { ...(p as any), stories: [] });
       }
-      for (const s of stories) {
-        const g = byUser.get((s as any).user_id);
-        if (g) g.stories.push(s as any);
+      for (const s of stories as any[]) {
+        const g = byUser.get(s.user_id);
+        if (!g) continue;
+        const url: string = s.image_url || "";
+        const isVideo = /\.(mp4|webm|mov|m4v)(\?|$)/i.test(url);
+        g.stories.push({ id: s.id, media_url: url, media_type: isVideo ? "video" : "image", created_at: s.created_at });
       }
       return Array.from(byUser.values());
     },
@@ -73,13 +76,11 @@ const StoriesBar = () => {
         supabase.functions.invoke("telegram-upload", { body: form }).catch(() => {});
       } catch {}
 
-      const mediaType = file.type.startsWith("video/") ? "video" : "image";
       const { error: insErr } = await supabase.from("stories").insert({
         user_id: user.id,
-        media_url: pub.publicUrl,
-        media_type: mediaType,
+        image_url: pub.publicUrl,
         expires_at: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
-      } as any);
+      });
       if (insErr) throw insErr;
       toast({ title: "Story posted — visible for 24 hours" });
       qc.invalidateQueries({ queryKey: ["stories-active"] });

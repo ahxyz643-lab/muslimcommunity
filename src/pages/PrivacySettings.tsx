@@ -34,10 +34,20 @@ const PrivacySettings = () => {
     (async () => {
       const [{ data: p }, { data: b }] = await Promise.all([
         supabase.from("profiles").select("is_private, show_activity").eq("user_id", user.id).maybeSingle(),
-        supabase.from("blocks" as any).select("id, blocked_id, created_at, profiles:blocked_id(username, display_name, avatar_url)").eq("blocker_id", user.id),
+        supabase.from("blocks" as any).select("id, blocked_id, created_at").eq("blocker_id", user.id),
       ]);
       setProfile(p || {});
-      setBlocked((b as any) || []);
+      const rows = ((b as any[]) || []);
+      if (rows.length > 0) {
+        const { data: profs } = await supabase
+          .from("profiles")
+          .select("user_id, username, display_name, avatar_url")
+          .in("user_id", rows.map((r) => r.blocked_id));
+        const map = new Map((profs || []).map((pr) => [pr.user_id, pr]));
+        setBlocked(rows.map((r) => ({ ...r, profiles: map.get(r.blocked_id) || null })));
+      } else {
+        setBlocked([]);
+      }
       setLoading(false);
     })();
   }, [user]);
