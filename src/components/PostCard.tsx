@@ -11,6 +11,8 @@ import { getVideoSrc } from "@/lib/video";
 import FollowButton from "@/components/FollowButton";
 import LoginPromptDialog from "@/components/LoginPromptDialog";
 import HiringInlineCard from "@/components/HiringInlineCard";
+import { enqueue } from "@/lib/offline/queue";
+import { cacheGet, cacheSet } from "@/lib/offline/db";
 
 export interface PostWithProfile {
   id: string;
@@ -60,16 +62,33 @@ const PostCardBase = ({ post, onDelete }: { post: PostWithProfile; onDelete?: (i
   // Check initial status
   useEffect(() => {
     if (!user) return;
+    const key = `post-state:${user.id}:${post.id}`;
+    if (!navigator.onLine) {
+      void cacheGet<{ liked: boolean; saved: boolean; reposted: boolean }>(key).then((s) => {
+        if (s) { setLiked(s.liked); setSaved(s.saved); setReposted(s.reposted); }
+      });
+      return;
+    }
+    let cancelled = false;
+    const state = { liked: false, saved: false, reposted: false };
     supabase.from("likes").select("id").eq("user_id", user.id).eq("post_id", post.id).maybeSingle()
-      .then(({ data }) => { if (data) setLiked(true); });
+      .then(({ data }) => { if (cancelled) return; state.liked = !!data; if (data) setLiked(true); void cacheSet(key, state); });
     supabase.from("saves").select("id").eq("user_id", user.id).eq("post_id", post.id).maybeSingle()
-      .then(({ data }) => { if (data) setSaved(true); });
+      .then(({ data }) => { if (cancelled) return; state.saved = !!data; if (data) setSaved(true); void cacheSet(key, state); });
     supabase.from("reposts").select("id").eq("user_id", user.id).eq("post_id", post.id).maybeSingle()
-      .then(({ data }) => { if (data) setReposted(true); });
+      .then(({ data }) => { if (cancelled) return; state.reposted = !!data; if (data) setReposted(true); void cacheSet(key, state); });
+    return () => { cancelled = true; };
   }, [user?.id, post.id]);
 
   const handleLike = async () => {
     if (!user) { setLoginPrompt("like posts"); return; }
+    if (!navigator.onLine) {
+      const next = !liked;
+      setLiked(next);
+      setLikesCount((c) => Math.max(0, c + (next ? 1 : -1)));
+      await enqueue(next ? "like" : "unlike", `like:${user.id}:${post.id}`, { user_id: user.id, post_id: post.id });
+      return;
+    }
     if (liked) {
       await supabase.from("likes").delete().eq("user_id", user.id).eq("post_id", post.id);
       setLiked(false);
@@ -86,6 +105,13 @@ const PostCardBase = ({ post, onDelete }: { post: PostWithProfile; onDelete?: (i
 
   const handleSave = async () => {
     if (!user) { setLoginPrompt("save posts"); return; }
+    if (!navigator.onLine) {
+      const next = !saved;
+      setSaved(next);
+      setSavesCount((c) => Math.max(0, c + (next ? 1 : -1)));
+      await enqueue(next ? "save" : "unsave", `save:${user.id}:${post.id}`, { user_id: user.id, post_id: post.id });
+      return;
+    }
     if (saved) {
       await supabase.from("saves").delete().eq("user_id", user.id).eq("post_id", post.id);
       setSaved(false);
@@ -99,6 +125,13 @@ const PostCardBase = ({ post, onDelete }: { post: PostWithProfile; onDelete?: (i
 
   const handleRepost = async () => {
     if (!user) { setLoginPrompt("repost"); return; }
+    if (!navigator.onLine) {
+      const next = !reposted;
+      setReposted(next);
+      setRepostsCount((c) => Math.max(0, c + (next ? 1 : -1)));
+      await enqueue(next ? "repost" : "unrepost", `repost:${user.id}:${post.id}`, { user_id: user.id, post_id: post.id });
+      return;
+    }
     if (reposted) {
       await supabase.from("reposts").delete().eq("user_id", user.id).eq("post_id", post.id);
       setReposted(false);
