@@ -8,6 +8,7 @@ import PostCard from "@/components/PostCard";
 import VerifiedBadge from "@/components/VerifiedBadge";
 import { useNavigate } from "react-router-dom";
 import { cacheGet, cacheSet } from "@/lib/offline/db";
+import { enqueue } from "@/lib/offline/queue";
 import { useOffline } from "@/hooks/useOffline";
 
 const trendingTopics = [
