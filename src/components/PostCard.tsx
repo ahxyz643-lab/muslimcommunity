@@ -13,6 +13,8 @@ import LoginPromptDialog from "@/components/LoginPromptDialog";
 import HiringInlineCard from "@/components/HiringInlineCard";
 import { enqueue } from "@/lib/offline/queue";
 import { cacheGet, cacheSet } from "@/lib/offline/db";
+import { isMediaCached, saveForOffline } from "@/lib/offline/media";
+import { Download, WifiOff, CheckCircle2 } from "lucide-react";
 
 export interface PostWithProfile {
   id: string;
@@ -57,7 +59,26 @@ const PostCardBase = ({ post, onDelete }: { post: PostWithProfile; onDelete?: (i
   const [showComments, setShowComments] = useState(false);
   const [isPlaying, setIsPlaying] = useState(false);
   const [loginPrompt, setLoginPrompt] = useState<null | string>(null);
+  const [videoCached, setVideoCached] = useState(false);
+  const [savingOffline, setSavingOffline] = useState(false);
+  const [isOnline, setIsOnline] = useState(typeof navigator === "undefined" ? true : navigator.onLine);
   const videoRef = useRef<HTMLVideoElement>(null);
+  const videoSrc = post.video_url || post.telegram_file_id ? getVideoSrc(post) : "";
+
+  useEffect(() => {
+    const up = () => setIsOnline(true);
+    const down = () => setIsOnline(false);
+    window.addEventListener("online", up);
+    window.addEventListener("offline", down);
+    return () => { window.removeEventListener("online", up); window.removeEventListener("offline", down); };
+  }, []);
+
+  useEffect(() => {
+    if (!videoSrc) return;
+    let cancelled = false;
+    void isMediaCached(videoSrc).then((c) => { if (!cancelled) setVideoCached(c); });
+    return () => { cancelled = true; };
+  }, [videoSrc]);
 
   // Check initial status
   useEffect(() => {
@@ -247,8 +268,15 @@ const PostCardBase = ({ post, onDelete }: { post: PostWithProfile; onDelete?: (i
           </div>
         )}
 
-        {(post.video_url || post.telegram_file_id) && (
+        {videoSrc && (
           <div className="relative px-4 pb-3">
+            {!isOnline && !videoCached ? (
+              <div className="flex h-40 w-full flex-col items-center justify-center gap-2 rounded-xl border border-border bg-secondary/50 text-center">
+                <WifiOff className="h-6 w-6 text-muted-foreground" />
+                <p className="text-xs text-muted-foreground">Internet required to play this video</p>
+              </div>
+            ) : (
+            <>
             <button
               type="button"
               onClick={() => navigate(`/reels?start=${post.id}&kind=post`)}
@@ -257,7 +285,7 @@ const PostCardBase = ({ post, onDelete }: { post: PostWithProfile; onDelete?: (i
             >
               <video
                 ref={videoRef}
-                src={getVideoSrc(post)}
+                src={videoSrc}
                 className="w-full rounded-xl object-cover pointer-events-none"
                 style={{ maxHeight: 400 }}
                 muted
@@ -268,6 +296,27 @@ const PostCardBase = ({ post, onDelete }: { post: PostWithProfile; onDelete?: (i
                 <Play className="h-6 w-6 ml-0.5" />
               </span>
             </button>
+            {videoCached ? (
+              <span className="absolute bottom-5 right-6 flex items-center gap-1 rounded-full bg-background/80 px-2 py-1 text-[10px] font-medium text-primary backdrop-blur">
+                <CheckCircle2 className="h-3 w-3" /> Available offline
+              </span>
+            ) : isOnline ? (
+              <button
+                onClick={async () => {
+                  setSavingOffline(true);
+                  const ok = await saveForOffline(videoSrc);
+                  setSavingOffline(false);
+                  setVideoCached(ok);
+                  toast({ title: ok ? "Saved for offline" : "Couldn't save video offline" });
+                }}
+                disabled={savingOffline}
+                className="absolute bottom-5 right-6 flex items-center gap-1 rounded-full bg-background/80 px-2 py-1 text-[10px] font-medium text-foreground backdrop-blur disabled:opacity-50"
+              >
+                <Download className="h-3 w-3" /> {savingOffline ? "Saving…" : "Save offline"}
+              </button>
+            ) : null}
+            </>
+            )}
           </div>
         )}
 
