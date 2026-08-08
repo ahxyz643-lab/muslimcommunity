@@ -11,6 +11,10 @@ import { getVideoSrc } from "@/lib/video";
 import FollowButton from "@/components/FollowButton";
 import LoginPromptDialog from "@/components/LoginPromptDialog";
 import HiringInlineCard from "@/components/HiringInlineCard";
+import { enqueue } from "@/lib/offline/queue";
+import { cacheGet, cacheSet } from "@/lib/offline/db";
+import { isMediaCached, saveForOffline } from "@/lib/offline/media";
+import { Download, WifiOff, CheckCircle2 } from "lucide-react";
 
 export interface PostWithProfile {
   id: string;
@@ -55,21 +59,57 @@ const PostCardBase = ({ post, onDelete }: { post: PostWithProfile; onDelete?: (i
   const [showComments, setShowComments] = useState(false);
   const [isPlaying, setIsPlaying] = useState(false);
   const [loginPrompt, setLoginPrompt] = useState<null | string>(null);
+  const [videoCached, setVideoCached] = useState(false);
+  const [savingOffline, setSavingOffline] = useState(false);
+  const [isOnline, setIsOnline] = useState(typeof navigator === "undefined" ? true : navigator.onLine);
   const videoRef = useRef<HTMLVideoElement>(null);
+  const videoSrc = post.video_url || post.telegram_file_id ? getVideoSrc(post) : "";
+
+  useEffect(() => {
+    const up = () => setIsOnline(true);
+    const down = () => setIsOnline(false);
+    window.addEventListener("online", up);
+    window.addEventListener("offline", down);
+    return () => { window.removeEventListener("online", up); window.removeEventListener("offline", down); };
+  }, []);
+
+  useEffect(() => {
+    if (!videoSrc) return;
+    let cancelled = false;
+    void isMediaCached(videoSrc).then((c) => { if (!cancelled) setVideoCached(c); });
+    return () => { cancelled = true; };
+  }, [videoSrc]);
 
   // Check initial status
   useEffect(() => {
     if (!user) return;
+    const key = `post-state:${user.id}:${post.id}`;
+    if (!navigator.onLine) {
+      void cacheGet<{ liked: boolean; saved: boolean; reposted: boolean }>(key).then((s) => {
+        if (s) { setLiked(s.liked); setSaved(s.saved); setReposted(s.reposted); }
+      });
+      return;
+    }
+    let cancelled = false;
+    const state = { liked: false, saved: false, reposted: false };
     supabase.from("likes").select("id").eq("user_id", user.id).eq("post_id", post.id).maybeSingle()
-      .then(({ data }) => { if (data) setLiked(true); });
+      .then(({ data }) => { if (cancelled) return; state.liked = !!data; if (data) setLiked(true); void cacheSet(key, state); });
     supabase.from("saves").select("id").eq("user_id", user.id).eq("post_id", post.id).maybeSingle()
-      .then(({ data }) => { if (data) setSaved(true); });
+      .then(({ data }) => { if (cancelled) return; state.saved = !!data; if (data) setSaved(true); void cacheSet(key, state); });
     supabase.from("reposts").select("id").eq("user_id", user.id).eq("post_id", post.id).maybeSingle()
-      .then(({ data }) => { if (data) setReposted(true); });
+      .then(({ data }) => { if (cancelled) return; state.reposted = !!data; if (data) setReposted(true); void cacheSet(key, state); });
+    return () => { cancelled = true; };
   }, [user?.id, post.id]);
 
   const handleLike = async () => {
     if (!user) { setLoginPrompt("like posts"); return; }
+    if (!navigator.onLine) {
+      const next = !liked;
+      setLiked(next);
+      setLikesCount((c) => Math.max(0, c + (next ? 1 : -1)));
+      await enqueue(next ? "like" : "unlike", `like:${user.id}:${post.id}`, { user_id: user.id, post_id: post.id });
+      return;
+    }
     if (liked) {
       await supabase.from("likes").delete().eq("user_id", user.id).eq("post_id", post.id);
       setLiked(false);
@@ -86,6 +126,13 @@ const PostCardBase = ({ post, onDelete }: { post: PostWithProfile; onDelete?: (i
 
   const handleSave = async () => {
     if (!user) { setLoginPrompt("save posts"); return; }
+    if (!navigator.onLine) {
+      const next = !saved;
+      setSaved(next);
+      setSavesCount((c) => Math.max(0, c + (next ? 1 : -1)));
+      await enqueue(next ? "save" : "unsave", `save:${user.id}:${post.id}`, { user_id: user.id, post_id: post.id });
+      return;
+    }
     if (saved) {
       await supabase.from("saves").delete().eq("user_id", user.id).eq("post_id", post.id);
       setSaved(false);
@@ -99,6 +146,13 @@ const PostCardBase = ({ post, onDelete }: { post: PostWithProfile; onDelete?: (i
 
   const handleRepost = async () => {
     if (!user) { setLoginPrompt("repost"); return; }
+    if (!navigator.onLine) {
+      const next = !reposted;
+      setReposted(next);
+      setRepostsCount((c) => Math.max(0, c + (next ? 1 : -1)));
+      await enqueue(next ? "repost" : "unrepost", `repost:${user.id}:${post.id}`, { user_id: user.id, post_id: post.id });
+      return;
+    }
     if (reposted) {
       await supabase.from("reposts").delete().eq("user_id", user.id).eq("post_id", post.id);
       setReposted(false);
@@ -214,8 +268,15 @@ const PostCardBase = ({ post, onDelete }: { post: PostWithProfile; onDelete?: (i
           </div>
         )}
 
-        {(post.video_url || post.telegram_file_id) && (
+        {videoSrc && (
           <div className="relative px-4 pb-3">
+            {!isOnline && !videoCached ? (
+              <div className="flex h-40 w-full flex-col items-center justify-center gap-2 rounded-xl border border-border bg-secondary/50 text-center">
+                <WifiOff className="h-6 w-6 text-muted-foreground" />
+                <p className="text-xs text-muted-foreground">Internet required to play this video</p>
+              </div>
+            ) : (
+            <>
             <button
               type="button"
               onClick={() => navigate(`/reels?start=${post.id}&kind=post`)}
@@ -224,7 +285,7 @@ const PostCardBase = ({ post, onDelete }: { post: PostWithProfile; onDelete?: (i
             >
               <video
                 ref={videoRef}
-                src={getVideoSrc(post)}
+                src={videoSrc}
                 className="w-full rounded-xl object-cover pointer-events-none"
                 style={{ maxHeight: 400 }}
                 muted
@@ -235,6 +296,27 @@ const PostCardBase = ({ post, onDelete }: { post: PostWithProfile; onDelete?: (i
                 <Play className="h-6 w-6 ml-0.5" />
               </span>
             </button>
+            {videoCached ? (
+              <span className="absolute bottom-5 right-6 flex items-center gap-1 rounded-full bg-background/80 px-2 py-1 text-[10px] font-medium text-primary backdrop-blur">
+                <CheckCircle2 className="h-3 w-3" /> Available offline
+              </span>
+            ) : isOnline ? (
+              <button
+                onClick={async () => {
+                  setSavingOffline(true);
+                  const ok = await saveForOffline(videoSrc);
+                  setSavingOffline(false);
+                  setVideoCached(ok);
+                  toast({ title: ok ? "Saved for offline" : "Couldn't save video offline" });
+                }}
+                disabled={savingOffline}
+                className="absolute bottom-5 right-6 flex items-center gap-1 rounded-full bg-background/80 px-2 py-1 text-[10px] font-medium text-foreground backdrop-blur disabled:opacity-50"
+              >
+                <Download className="h-3 w-3" /> {savingOffline ? "Saving…" : "Save offline"}
+              </button>
+            ) : null}
+            </>
+            )}
           </div>
         )}
 

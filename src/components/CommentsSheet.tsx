@@ -6,6 +6,8 @@ import { useToast } from "@/hooks/use-toast";
 import { formatDistanceToNow } from "date-fns";
 import { useNavigate } from "react-router-dom";
 import { getUserFriendlyError } from "@/lib/errors";
+import { enqueue } from "@/lib/offline/queue";
+import { cacheGet, cacheSet } from "@/lib/offline/db";
 
 interface Comment {
   id: string;
@@ -40,6 +42,13 @@ const CommentsSheet = ({ postId, reelId, type = "post", onClose, onCountChange }
 
   const fetchComments = async () => {
     if (!targetId) { setLoading(false); return; }
+    const cacheKey = `comments:${type}:${targetId}`;
+    if (!navigator.onLine) {
+      const cached = await cacheGet<Comment[]>(cacheKey);
+      setComments(cached || []);
+      setLoading(false);
+      return;
+    }
     const { data } = await supabase
       .from(tableName as any)
       .select("*")
@@ -76,6 +85,7 @@ const CommentsSheet = ({ postId, reelId, type = "post", onClose, onCountChange }
     });
 
     setComments(topLevel);
+    void cacheSet(cacheKey, topLevel);
     setLoading(false);
   };
 
@@ -87,10 +97,33 @@ const CommentsSheet = ({ postId, reelId, type = "post", onClose, onCountChange }
     if (!user) { navigate("/auth"); return; }
     if (!newComment.trim() || !targetId) return;
     setSending(true);
+    const content = newComment.trim();
+    if (!navigator.onLine) {
+      const id = crypto.randomUUID();
+      const optimistic: Comment = { id, content, user_id: user.id, created_at: new Date().toISOString(), parent_id: supportsReplies ? replyTo?.id ?? null : null, replies: [] };
+      if (optimistic.parent_id) {
+        setComments((prev) => prev.map((c) => (c.id === optimistic.parent_id ? { ...c, replies: [...(c.replies || []), optimistic] } : c)));
+      } else {
+        setComments((prev) => [...prev, optimistic]);
+      }
+      await enqueue(
+        type === "reel" ? "reel_comment" : "comment",
+        `comment:${id}`,
+        type === "reel"
+          ? { id, reel_id: targetId, user_id: user.id, content }
+          : { id, post_id: targetId, user_id: user.id, content, parent_id: optimistic.parent_id },
+      );
+      setNewComment("");
+      setReplyTo(null);
+      onCountChange?.(1);
+      setSending(false);
+      toast({ title: "Saved offline", description: "Your comment will post when you're back online." });
+      return;
+    }
     const payload: any = {
       [fkColumn]: targetId,
       user_id: user.id,
-      content: newComment.trim(),
+      content,
     };
     if (supportsReplies) payload.parent_id = replyTo?.id ?? null;
     const { error } = await supabase.from(tableName as any).insert(payload);

@@ -11,11 +11,15 @@ import { fetchPostsWithProfiles } from "@/lib/posts";
 import { useAuth } from "@/contexts/AuthContext";
 import { Loader2 } from "lucide-react";
 import { useSeo } from "@/hooks/useSeo";
+import { cacheGet, cacheSet } from "@/lib/offline/db";
+import { useOffline } from "@/hooks/useOffline";
 
 const PAGE_SIZE = 15;
 
 const Home = () => {
   const { user } = useAuth();
+  const { online } = useOffline();
+  const cacheKey = `feed:home:${user?.id || "guest"}`;
   useSeo(
     "Muslim Community — Your digital ummah",
     "Connect with the Muslim community: posts, reels, jobs, donations, and real-time messaging.",
@@ -26,8 +30,10 @@ const Home = () => {
   const [hasMore, setHasMore] = useState(true);
   const offsetRef = useRef(0);
   const sentinelRef = useRef<HTMLDivElement | null>(null);
+  const refreshTimer = useRef<number | undefined>(undefined);
 
   const fetchPage = useCallback(async (offset: number): Promise<PostWithProfile[]> => {
+    if (typeof navigator !== "undefined" && !navigator.onLine) return [];
     if (user) {
       const { data } = await supabase.rpc("get_personalized_feed", { _user_id: user.id, _limit: PAGE_SIZE, _offset: offset, _videos_only: false });
       const rows = (data || []).filter((r: any) => r.kind === "post");
@@ -43,15 +49,30 @@ const Home = () => {
   }, [user?.id]);
 
   const loadPosts = useCallback(async () => {
+    // 1) paint instantly from cache, 2) refresh from network when possible
+    const cached = await cacheGet<PostWithProfile[]>(cacheKey);
+    if (cached?.length) {
+      setPosts((prev) => (prev.length ? prev : cached));
+      offsetRef.current = Math.max(offsetRef.current, cached.length);
+      setLoading(false);
+    }
+    if (typeof navigator !== "undefined" && !navigator.onLine) {
+      setLoading(false);
+      setHasMore(false);
+      return;
+    }
     const first = await fetchPage(0);
+    if (first.length === 0 && cached?.length) return;
     offsetRef.current = first.length;
     setHasMore(first.length >= PAGE_SIZE);
     setPosts(first);
     setLoading(false);
-  }, [fetchPage]);
+    void cacheSet(cacheKey, first.slice(0, 40));
+  }, [fetchPage, cacheKey]);
 
   const loadMore = useCallback(async () => {
     if (loadingMore || !hasMore) return;
+    if (typeof navigator !== "undefined" && !navigator.onLine) { setHasMore(false); return; }
     setLoadingMore(true);
     const next = await fetchPage(offsetRef.current);
     if (next.length === 0) {
@@ -60,24 +81,31 @@ const Home = () => {
       offsetRef.current += next.length;
       setPosts((prev) => {
         const seen = new Set(prev.map((p) => p.id));
-        return [...prev, ...next.filter((p) => !seen.has(p.id))];
+        const merged = [...prev, ...next.filter((p) => !seen.has(p.id))];
+        void cacheSet(cacheKey, merged.slice(0, 40));
+        return merged;
       });
       if (next.length < PAGE_SIZE) setHasMore(false);
     }
     setLoadingMore(false);
-  }, [fetchPage, hasMore, loadingMore]);
+  }, [fetchPage, hasMore, loadingMore, cacheKey]);
 
   useEffect(() => {
     setLoading(true);
     setHasMore(true);
     offsetRef.current = 0;
     loadPosts();
+    if (typeof navigator !== "undefined" && !navigator.onLine) return;
     const channel = supabase
       .channel("posts-feed")
-      .on("postgres_changes", { event: "*", schema: "public", table: "posts" }, () => { loadPosts(); })
+      .on("postgres_changes", { event: "*", schema: "public", table: "posts" }, () => {
+        // debounce bursty realtime events so the feed doesn't refetch per row
+        window.clearTimeout(refreshTimer.current);
+        refreshTimer.current = window.setTimeout(() => { void loadPosts(); }, 1500);
+      })
       .subscribe();
-    return () => { supabase.removeChannel(channel); };
-  }, [user?.id]);
+    return () => { window.clearTimeout(refreshTimer.current); supabase.removeChannel(channel); };
+  }, [user?.id, online]);
 
   useEffect(() => {
     const el = sentinelRef.current;

@@ -9,6 +9,7 @@ import { ThemeProvider } from "@/contexts/ThemeContext";
 import SplashScreen from "@/components/SplashScreen";
 import BottomNav from "@/components/BottomNav";
 import ErrorBoundary from "@/components/ErrorBoundary";
+import OfflineIndicator from "@/components/OfflineIndicator";
 import Home from "@/pages/Home";
 import Explore from "@/pages/Explore";
 import Messages from "@/pages/Messages";
@@ -124,6 +125,7 @@ const AppRoutes = () => {
       </Suspense>
       </ErrorBoundary>
       {!onAdmin && <BottomNav />}
+      <OfflineIndicator />
     </div>
   );
 };
