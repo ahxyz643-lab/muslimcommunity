@@ -1,0 +1,13 @@
+{
+  "name": "Muslim Community",
+  "short_name": "Ummah",
+  "description": "Connect with the global Muslim community through reels, chat, jobs, and meaningful connections.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#0b0f0d",
+  "theme_color": "#0b0f0d",
+  "icons": [
+    { "src": "/favicon.ico", "sizes": "64x64 32x32 24x24 16x16", "type": "image/x-icon" }
+  ]
+}
