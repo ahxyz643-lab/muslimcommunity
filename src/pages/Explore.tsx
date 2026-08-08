@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Search, TrendingUp, Loader2, UserPlus, UserCheck, Briefcase, HandHeart } from "lucide-react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
@@ -7,6 +7,8 @@ import { fetchPostsWithProfiles } from "@/lib/posts";
 import PostCard from "@/components/PostCard";
 import VerifiedBadge from "@/components/VerifiedBadge";
 import { useNavigate } from "react-router-dom";
+import { cacheGet, cacheSet } from "@/lib/offline/db";
+import { useOffline } from "@/hooks/useOffline";
 
 const trendingTopics = [
   "#IslamicReminders", "#Quran", "#Hadith", "#MuslimCreators",
@@ -15,19 +17,31 @@ const trendingTopics = [
 
 const Explore = () => {
   const [query, setQuery] = useState("");
+  const [debouncedQuery, setDebouncedQuery] = useState("");
   const [tab, setTab] = useState<"posts" | "jobs" | "donations">("posts");
   const { user } = useAuth();
+  const { online } = useOffline();
   const queryClient = useQueryClient();
   const navigate = useNavigate();
+
+  // debounce search so typing doesn't fire a request per keystroke
+  useEffect(() => {
+    const t = window.setTimeout(() => setDebouncedQuery(query.trim()), 350);
+    return () => window.clearTimeout(t);
+  }, [query]);
 
   const { data: profiles = [] } = useQuery({
     queryKey: ["suggested-profiles", user?.id],
     queryFn: async () => {
+      if (!navigator.onLine) return (await cacheGet<any[]>("explore:profiles")) || [];
       let q = supabase.from("profiles").select("*").limit(10);
       if (user?.id) q = q.neq("user_id", user.id);
       const { data } = await q;
+      void cacheSet("explore:profiles", data || []);
       return data || [];
     },
+    staleTime: 5 * 60 * 1000,
+    retry: 1,
   });
 
   const { data: followingIds = [] } = useQuery({
@@ -36,21 +50,36 @@ const Explore = () => {
       const { data } = await supabase.from("follows").select("following_id").eq("follower_id", user!.id);
       return data?.map((f) => f.following_id) || [];
     },
-    enabled: !!user,
+    enabled: !!user && online,
+    staleTime: 60 * 1000,
   });
 
   const { data: posts = [], isLoading } = useQuery({
-    queryKey: ["explore-posts", query],
+    queryKey: ["explore-posts", debouncedQuery],
     queryFn: async () => {
+      const key = `explore:posts:${debouncedQuery}`;
+      if (!navigator.onLine) return (await cacheGet<any[]>(key)) || (await cacheGet<any[]>("explore:posts:")) || [];
       let q = supabase.from("posts").select("*").order("likes_count", { ascending: false }).limit(20);
-      if (query.trim()) q = q.ilike("content", `%${query.trim()}%`);
-      return fetchPostsWithProfiles(q);
+      if (debouncedQuery) q = q.ilike("content", `%${debouncedQuery}%`);
+      const rows = await fetchPostsWithProfiles(q);
+      void cacheSet(key, rows);
+      return rows;
     },
+    staleTime: 2 * 60 * 1000,
+    placeholderData: (prev) => prev,
+    retry: 1,
   });
 
   const handleFollow = async (targetId: string) => {
     if (!user) return;
     const isFollowing = followingIds.includes(targetId);
+    if (!navigator.onLine) {
+      await enqueue(isFollowing ? "unfollow" : "follow", `follow:${user.id}:${targetId}`, { follower_id: user.id, following_id: targetId });
+      queryClient.setQueryData(["following-ids", user.id], (prev: string[] = []) =>
+        isFollowing ? prev.filter((id) => id !== targetId) : [...prev, targetId],
+      );
+      return;
+    }
     if (isFollowing) {
       await supabase.from("follows").delete().eq("follower_id", user.id).eq("following_id", targetId);
     } else {
@@ -61,13 +90,25 @@ const Explore = () => {
 
   const { data: exJobs = [] } = useQuery({
     queryKey: ["explore-jobs"],
-    queryFn: async () => (await supabase.from("jobs").select("*").eq("status", "approved").order("created_at", { ascending: false }).limit(20)).data || [],
+    queryFn: async () => {
+      if (!navigator.onLine) return (await cacheGet<any[]>("explore:jobs")) || [];
+      const rows = (await supabase.from("jobs").select("*").eq("status", "approved").order("created_at", { ascending: false }).limit(20)).data || [];
+      void cacheSet("explore:jobs", rows);
+      return rows;
+    },
     enabled: tab === "jobs",
+    staleTime: 5 * 60 * 1000,
   });
   const { data: exDonations = [] } = useQuery({
     queryKey: ["explore-donations"],
-    queryFn: async () => (await supabase.from("donations").select("*").eq("status", "approved").order("created_at", { ascending: false }).limit(20)).data || [],
+    queryFn: async () => {
+      if (!navigator.onLine) return (await cacheGet<any[]>("explore:donations")) || [];
+      const rows = (await supabase.from("donations").select("*").eq("status", "approved").order("created_at", { ascending: false }).limit(20)).data || [];
+      void cacheSet("explore:donations", rows);
+      return rows;
+    },
     enabled: tab === "donations",
+    staleTime: 5 * 60 * 1000,
   });
 
   return (
