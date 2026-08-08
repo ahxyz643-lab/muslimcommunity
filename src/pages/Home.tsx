@@ -30,6 +30,7 @@ const Home = () => {
   const [hasMore, setHasMore] = useState(true);
   const offsetRef = useRef(0);
   const sentinelRef = useRef<HTMLDivElement | null>(null);
+  const refreshTimer = useRef<number | undefined>(undefined);
 
   const fetchPage = useCallback(async (offset: number): Promise<PostWithProfile[]> => {
     if (typeof navigator !== "undefined" && !navigator.onLine) return [];
