@@ -11,6 +11,7 @@ export type ActionType =
   | "follow"
   | "unfollow"
   | "comment"
+  | "reel_comment"
   | "profile_update";
 
 type Listener = () => void;
@@ -118,6 +119,10 @@ const executors: Record<ActionType, (p: any) => Promise<void>> = {
       await throwOn(
         supabase.from("comments").insert({ id: p.id, post_id: p.post_id, user_id: p.user_id, content: p.content, parent_id: p.parent_id ?? null }),
       );
+  },
+  reel_comment: async (p) => {
+    const { data } = await supabase.from("reel_comments").select("id").eq("id", p.id).maybeSingle();
+    if (!data) await throwOn(supabase.from("reel_comments").insert({ id: p.id, reel_id: p.reel_id, user_id: p.user_id, content: p.content }));
   },
   profile_update: async (p) => {
     await throwOn(supabase.from("profiles").update(p.values).eq("user_id", p.user_id));
