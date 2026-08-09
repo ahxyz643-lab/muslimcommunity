@@ -155,7 +155,10 @@ const CreatePost = () => {
       navigate("/");
     } catch (err: any) {
       console.error("[CreatePost]", err);
-      toast({ title: "Error", description: (await import("@/lib/errors")).getUserFriendlyError(err), variant: "destructive" });
+      const friendly = /too large|supported video|session expired|cancelled|couldn't upload|Network error/i.test(err?.message || "")
+        ? err.message
+        : (await import("@/lib/errors")).getUserFriendlyError(err);
+      toast({ title: "Couldn't publish", description: friendly, variant: "destructive" });
     } finally {
       setPosting(false);
     }
