@@ -418,7 +418,7 @@ const Messages = () => {
         const { data: urlData } = supabase.storage.from("media").getPublicUrl(path);
         uploadedImageUrl = urlData.publicUrl;
       } else {
-        toast({ title: "Image failed to send", description: "Please try again.", variant: "destructive" });
+        console.error("[chat] image upload failed", uploadErr);
       }
       clearImage();
     }
@@ -433,7 +433,7 @@ const Messages = () => {
         const { data: urlData } = supabase.storage.from("media").getPublicUrl(path);
         uploadedVoiceUrl = urlData.publicUrl;
       } else {
-        toast({ title: "Voice note failed to send", description: "Please try again.", variant: "destructive" });
+        console.error("[chat] voice upload failed", uploadErr);
       }
       clearVoice();
     }
