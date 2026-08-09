@@ -4,7 +4,8 @@ import { X, Upload, Loader2, Music, Type, Sparkles, Scissors, Play, Pause } from
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
-import { uploadVideoToTelegram } from "@/lib/video";
+import { uploadVideoToTelegram, validateVideo } from "@/lib/video";
+import { getUserFriendlyError } from "@/lib/errors";
 
 const FILTERS = [
   { id: "none", label: "Original", css: "" },
@@ -44,6 +45,11 @@ const CreateReel = () => {
   const [textOverlay, setTextOverlay] = useState("");
   const [isPlaying, setIsPlaying] = useState(false);
   const [posting, setPosting] = useState(false);
+  const [status, setStatus] = useState<"IDLE" | "PREPARING" | "UPLOADING" | "PROCESSING" | "READY" | "FAILED">("IDLE");
+  const [progress, setProgress] = useState(0);
+  const [uploadError, setUploadError] = useState<string | null>(null);
+  // Reuse the same Telegram file across retries so we never double-upload.
+  const uploadedFileIdRef = useRef<string | null>(null);
   const [activePanel, setActivePanel] = useState<"filter" | "music" | "text" | null>(null);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -63,10 +69,12 @@ const CreateReel = () => {
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const f = e.target.files?.[0];
     if (!f) return;
-    if (f.size > 20 * 1024 * 1024) {
-      toast({ title: "File too large", description: "Max 20MB (Telegram storage)", variant: "destructive" });
+    const invalid = validateVideo(f);
+    if (invalid) {
+      toast({ title: "Can't use this video", description: invalid, variant: "destructive" });
       return;
     }
+    uploadedFileIdRef.current = null;
     setFile(f);
     setPreviewUrl(URL.createObjectURL(f));
     setStep("trim");
@@ -91,8 +99,20 @@ const CreateReel = () => {
   const handlePost = async () => {
     if (!user || !file) return;
     setPosting(true);
+    setUploadError(null);
     try {
-      const fileId = await uploadVideoToTelegram(file, caption.trim() || undefined);
+      let fileId = uploadedFileIdRef.current;
+      if (!fileId) {
+        setStatus("PREPARING");
+        setProgress(0);
+        setStatus("UPLOADING");
+        fileId = await uploadVideoToTelegram(file, {
+          caption: caption.trim() || undefined,
+          onProgress: setProgress,
+        });
+        uploadedFileIdRef.current = fileId;
+      }
+      setStatus("PROCESSING");
 
       const { error } = await supabase.from("reels").insert({
         user_id: user.id,
@@ -106,10 +126,17 @@ const CreateReel = () => {
       });
       if (error) throw error;
 
+      setStatus("READY");
       toast({ title: "Reel shared! ✨" });
       navigate("/reels");
     } catch (err: any) {
-      toast({ title: "Error", description: err.message, variant: "destructive" });
+      console.error("[CreateReel]", err);
+      setStatus("FAILED");
+      const msg = /too large|supported video|session expired|cancelled|couldn't upload|Network error/i.test(err?.message || "")
+        ? err.message
+        : getUserFriendlyError(err);
+      setUploadError(msg);
+      toast({ title: "We couldn't publish your reel", description: msg, variant: "destructive" });
     } finally {
       setPosting(false);
     }
