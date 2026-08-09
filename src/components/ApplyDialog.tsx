@@ -82,13 +82,8 @@ const ApplyDialog = ({ open, onOpenChange, jobId, jobTitle }: ApplyDialogProps) 
 
       let resume_url: string | null = null;
       if (resume) {
-        const ext = resume.name.split(".").pop() || "pdf";
-        const path = `resumes/${user.id}/${Date.now()}.${ext}`;
-        const { error: upErr } = await supabase.storage.from("media").upload(path, resume, {
-          contentType: resume.type || "application/pdf",
-        });
-        if (upErr) throw upErr;
-        resume_url = supabase.storage.from("media").getPublicUrl(path).data.publicUrl;
+        const { uploadUserFile } = await import("@/lib/storage");
+        resume_url = await uploadUserFile("media", user.id, "resumes", resume);
       }
 
       const skillsArr = form.skills

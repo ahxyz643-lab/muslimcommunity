@@ -61,11 +61,8 @@ const StoriesBar = () => {
     try {
       // Upload to Storage first (public URL) so viewer can display it,
       // and archive a copy in Telegram bot #2 for admin backup.
-      const ext = (file.name.split(".").pop() || "bin").toLowerCase();
-      const path = `stories/${user.id}/${Date.now()}.${ext}`;
-      const { error: upErr } = await supabase.storage.from("media").upload(path, file, { contentType: file.type });
-      if (upErr) throw upErr;
-      const { data: pub } = supabase.storage.from("media").getPublicUrl(path);
+      const { uploadUserFile } = await import("@/lib/storage");
+      const pub = { publicUrl: await uploadUserFile("media", user.id, "stories", file) };
 
       // Fire-and-forget: archive to Telegram bot #2 so channel gets a copy.
       try {

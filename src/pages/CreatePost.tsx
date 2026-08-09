@@ -86,11 +86,8 @@ const CreatePost = () => {
 
       if (mediaFile) {
         if (selectedType === "photo") {
-          const ext = mediaFile.name.split(".").pop();
-          const path = `${user.id}/${Date.now()}.${ext}`;
-          const { error: uploadErr } = await supabase.storage.from("media").upload(path, mediaFile);
-          if (uploadErr) throw uploadErr;
-          imageUrl = supabase.storage.from("media").getPublicUrl(path).data.publicUrl;
+          const { uploadUserFile } = await import("@/lib/storage");
+          imageUrl = await uploadUserFile("media", user.id, "photos", mediaFile);
         } else {
           telegramFileId = await uploadVideoToTelegram(mediaFile, content.trim() || undefined);
         }
