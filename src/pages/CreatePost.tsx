@@ -86,11 +86,8 @@ const CreatePost = () => {
 
       if (mediaFile) {
         if (selectedType === "photo") {
-          const ext = mediaFile.name.split(".").pop();
-          const path = `${user.id}/${Date.now()}.${ext}`;
-          const { error: uploadErr } = await supabase.storage.from("media").upload(path, mediaFile);
-          if (uploadErr) throw uploadErr;
-          imageUrl = supabase.storage.from("media").getPublicUrl(path).data.publicUrl;
+          const { uploadUserFile } = await import("@/lib/storage");
+          imageUrl = await uploadUserFile("media", user.id, "photos", mediaFile);
         } else {
           telegramFileId = await uploadVideoToTelegram(mediaFile, content.trim() || undefined);
         }
@@ -158,7 +155,10 @@ const CreatePost = () => {
       navigate("/");
     } catch (err: any) {
       console.error("[CreatePost]", err);
-      toast({ title: "Error", description: (await import("@/lib/errors")).getUserFriendlyError(err), variant: "destructive" });
+      const friendly = /too large|supported video|session expired|cancelled|couldn't upload|Network error/i.test(err?.message || "")
+        ? err.message
+        : (await import("@/lib/errors")).getUserFriendlyError(err);
+      toast({ title: "Couldn't publish", description: friendly, variant: "destructive" });
     } finally {
       setPosting(false);
     }

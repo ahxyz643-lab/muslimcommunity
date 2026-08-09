@@ -4,7 +4,8 @@ import { X, Upload, Loader2, Music, Type, Sparkles, Scissors, Play, Pause } from
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
-import { uploadVideoToTelegram } from "@/lib/video";
+import { uploadVideoToTelegram, validateVideo } from "@/lib/video";
+import { getUserFriendlyError } from "@/lib/errors";
 
 const FILTERS = [
   { id: "none", label: "Original", css: "" },
@@ -44,6 +45,11 @@ const CreateReel = () => {
   const [textOverlay, setTextOverlay] = useState("");
   const [isPlaying, setIsPlaying] = useState(false);
   const [posting, setPosting] = useState(false);
+  const [status, setStatus] = useState<"IDLE" | "PREPARING" | "UPLOADING" | "PROCESSING" | "READY" | "FAILED">("IDLE");
+  const [progress, setProgress] = useState(0);
+  const [uploadError, setUploadError] = useState<string | null>(null);
+  // Reuse the same Telegram file across retries so we never double-upload.
+  const uploadedFileIdRef = useRef<string | null>(null);
   const [activePanel, setActivePanel] = useState<"filter" | "music" | "text" | null>(null);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -63,10 +69,12 @@ const CreateReel = () => {
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const f = e.target.files?.[0];
     if (!f) return;
-    if (f.size > 20 * 1024 * 1024) {
-      toast({ title: "File too large", description: "Max 20MB (Telegram storage)", variant: "destructive" });
+    const invalid = validateVideo(f);
+    if (invalid) {
+      toast({ title: "Can't use this video", description: invalid, variant: "destructive" });
       return;
     }
+    uploadedFileIdRef.current = null;
     setFile(f);
     setPreviewUrl(URL.createObjectURL(f));
     setStep("trim");
@@ -91,8 +99,20 @@ const CreateReel = () => {
   const handlePost = async () => {
     if (!user || !file) return;
     setPosting(true);
+    setUploadError(null);
     try {
-      const fileId = await uploadVideoToTelegram(file, caption.trim() || undefined);
+      let fileId = uploadedFileIdRef.current;
+      if (!fileId) {
+        setStatus("PREPARING");
+        setProgress(0);
+        setStatus("UPLOADING");
+        fileId = await uploadVideoToTelegram(file, {
+          caption: caption.trim() || undefined,
+          onProgress: setProgress,
+        });
+        uploadedFileIdRef.current = fileId;
+      }
+      setStatus("PROCESSING");
 
       const { error } = await supabase.from("reels").insert({
         user_id: user.id,
@@ -106,10 +126,17 @@ const CreateReel = () => {
       });
       if (error) throw error;
 
+      setStatus("READY");
       toast({ title: "Reel shared! ✨" });
       navigate("/reels");
     } catch (err: any) {
-      toast({ title: "Error", description: err.message, variant: "destructive" });
+      console.error("[CreateReel]", err);
+      setStatus("FAILED");
+      const msg = /too large|supported video|session expired|cancelled|couldn't upload|Network error/i.test(err?.message || "")
+        ? err.message
+        : getUserFriendlyError(err);
+      setUploadError(msg);
+      toast({ title: "We couldn't publish your reel", description: msg, variant: "destructive" });
     } finally {
       setPosting(false);
     }
@@ -348,6 +375,29 @@ const CreateReel = () => {
 
       {/* Caption */}
       <div className="border-t border-white/10 bg-black p-3">
+        {status !== "IDLE" && status !== "READY" && (
+          <div className="mb-3 rounded-xl bg-white/5 p-3">
+            <div className="flex items-center justify-between text-xs text-white/80">
+              <span>
+                {status === "PREPARING" && "Preparing video..."}
+                {status === "UPLOADING" && `Uploading ${progress}%`}
+                {status === "PROCESSING" && "Processing..."}
+                {status === "FAILED" && (uploadError || "Upload failed")}
+              </span>
+              {status === "FAILED" && (
+                <div className="flex gap-2">
+                  <button onClick={handlePost} className="rounded-lg bg-primary px-3 py-1 font-semibold text-primary-foreground">Retry</button>
+                  <button onClick={() => { setStatus("IDLE"); setUploadError(null); }} className="rounded-lg bg-white/10 px-3 py-1 text-white">Cancel</button>
+                </div>
+              )}
+            </div>
+            {status !== "FAILED" && (
+              <div className="mt-2 h-1 w-full overflow-hidden rounded-full bg-white/10">
+                <div className="h-full bg-primary transition-all" style={{ width: `${status === "UPLOADING" ? progress : 100}%` }} />
+              </div>
+            )}
+          </div>
+        )}
         <input
           type="text"
           value={caption}

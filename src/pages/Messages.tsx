@@ -409,7 +409,7 @@ const Messages = () => {
 
     if (imageFile) {
       const ext = imageFile.name.split(".").pop() || "jpg";
-      const path = `chat/${activeConvo.id}/${crypto.randomUUID()}.${ext}`;
+      const path = `${user.id}/chat/${activeConvo.id}/${crypto.randomUUID()}.${ext}`;
       const { error: uploadErr } = await supabase.storage
         .from("media")
         .upload(path, imageFile, { contentType: imageFile.type });
@@ -417,12 +417,14 @@ const Messages = () => {
       if (!uploadErr) {
         const { data: urlData } = supabase.storage.from("media").getPublicUrl(path);
         uploadedImageUrl = urlData.publicUrl;
+      } else {
+        console.error("[chat] image upload failed", uploadErr);
       }
       clearImage();
     }
 
     if (voiceBlob) {
-      const path = `chat/${activeConvo.id}/${crypto.randomUUID()}.webm`;
+      const path = `${user.id}/chat/${activeConvo.id}/${crypto.randomUUID()}.webm`;
       const { error: uploadErr } = await supabase.storage
         .from("media")
         .upload(path, voiceBlob, { contentType: "audio/webm" });
@@ -430,6 +432,8 @@ const Messages = () => {
       if (!uploadErr) {
         const { data: urlData } = supabase.storage.from("media").getPublicUrl(path);
         uploadedVoiceUrl = urlData.publicUrl;
+      } else {
+        console.error("[chat] voice upload failed", uploadErr);
       }
       clearVoice();
     }

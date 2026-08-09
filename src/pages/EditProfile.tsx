@@ -59,11 +59,9 @@ const EditProfile = () => {
       let avatarUrl = profile.avatar_url;
 
       if (avatarFile) {
-        const ext = avatarFile.name.split(".").pop();
-        const path = `avatars/${user.id}/${Date.now()}.${ext}`;
-        const { error: uploadErr } = await supabase.storage.from("media").upload(path, avatarFile);
-        if (uploadErr) throw uploadErr;
-        const { data: urlData } = supabase.storage.from("media").getPublicUrl(path);
+        const { uploadUserFile } = await import("@/lib/storage");
+        const publicUrl = await uploadUserFile("media", user.id, "avatars", avatarFile);
+        const urlData = { publicUrl };
         avatarUrl = urlData.publicUrl;
 
         // Fire-and-forget: archive new profile picture to Telegram bot #2 admin channel.
