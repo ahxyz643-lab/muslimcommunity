@@ -375,6 +375,29 @@ const CreateReel = () => {
 
       {/* Caption */}
       <div className="border-t border-white/10 bg-black p-3">
+        {status !== "IDLE" && status !== "READY" && (
+          <div className="mb-3 rounded-xl bg-white/5 p-3">
+            <div className="flex items-center justify-between text-xs text-white/80">
+              <span>
+                {status === "PREPARING" && "Preparing video..."}
+                {status === "UPLOADING" && `Uploading ${progress}%`}
+                {status === "PROCESSING" && "Processing..."}
+                {status === "FAILED" && (uploadError || "Upload failed")}
+              </span>
+              {status === "FAILED" && (
+                <div className="flex gap-2">
+                  <button onClick={handlePost} className="rounded-lg bg-primary px-3 py-1 font-semibold text-primary-foreground">Retry</button>
+                  <button onClick={() => { setStatus("IDLE"); setUploadError(null); }} className="rounded-lg bg-white/10 px-3 py-1 text-white">Cancel</button>
+                </div>
+              )}
+            </div>
+            {status !== "FAILED" && (
+              <div className="mt-2 h-1 w-full overflow-hidden rounded-full bg-white/10">
+                <div className="h-full bg-primary transition-all" style={{ width: `${status === "UPLOADING" ? progress : 100}%` }} />
+              </div>
+            )}
+          </div>
+        )}
         <input
           type="text"
           value={caption}
