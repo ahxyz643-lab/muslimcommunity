@@ -23,10 +23,25 @@ export function validateVideo(file: File): string | null {
   return null;
 }
 
-type UploadOpts = {
+export type MediaUploadStatus = "PREPARING" | "UPLOADING" | "PROCESSING" | "READY" | "FAILED" | "CANCELLED";
+
+export type UploadOpts = {
   caption?: string;
   onProgress?: (pct: number) => void;
   signal?: AbortSignal;
+};
+
+export interface MediaProvider {
+  uploadVideo(file: File, options?: UploadOpts): Promise<string>;
+  getVideo(row: { telegram_file_id?: string | null; video_url?: string | null }): string;
+  validateMedia(file: File): string | null;
+}
+
+/** Telegram remains the storage provider while the UI depends on this stable abstraction. */
+export const TelegramMediaProvider: MediaProvider = {
+  uploadVideo: uploadVideoToTelegram,
+  getVideo: getVideoSrc,
+  validateMedia: validateVideo,
 };
 
 /** Uploads a video file to Telegram via edge function. Returns the Telegram file_id. */
@@ -59,8 +74,13 @@ export async function uploadVideoToTelegram(file: File, captionOrOpts?: string |
         opts.onProgress?.(100);
         resolve(json.file_id as string);
       } else {
-        console.error("[telegram-upload]", xhr.status, xhr.responseText);
-        reject(new Error(xhr.status === 413 ? "This video is too large. Please choose a smaller video." : "We couldn't upload your video. Please try again."));
+        console.error("[telegram-upload]", xhr.status, json.error || xhr.statusText);
+        const message = xhr.status === 413
+          ? "This video is too large. Please choose a smaller video."
+          : xhr.status === 401
+            ? "Your session expired. Please sign in again."
+            : "We couldn't upload your video. Please try again.";
+        reject(new Error(message));
       }
     };
     opts.signal?.addEventListener("abort", () => xhr.abort());
