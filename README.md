@@ -1,73 +1,40 @@
-# Welcome to your Lovable project
+# Muslim Connect
 
-## Project info
+Build a full social media platform called Muslim Community that combines the major features found in platforms such as Instagram and X (Twitter). The application must support user profiles, posts, likes, comments, reposts, saving posts, messaging, voice calls, and video calls. Users should be able to upload photos, videos, and text content and interact with other users in real time.
 
-**URL**: https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID
+The platform must include an AI-based recommendation algorithm. This algorithm should analyze user behavior such as likes, watch time, comments, shares, and followed accounts. Based on this data, the system should automatically recommend relevant content to each user. For example, if a user frequently interacts with Islamic lectures, Arabic posts, or educational videos, the feed should prioritize similar content. The recommendation system should continuously learn from user activity and adjust the feed dynamically.
 
-## How can I edit this code?
+The application must also include a language detection and translation feature. When a user posts content in languages such as Arabic, Hindi, Urdu, or English, the system should automatically detect the language and show a “Translate Post” option. When users click this option, the post should be translated into the language selected in their profile settings. Translation should work for both text posts and captions of videos. For implementing translation, APIs such as Google Translate or DeepL Translator can be integrated.
 
-There are several ways of editing your application.
+The app must include a Creator Studio where users can manage their posts, upload media, schedule content, and track engagement statistics such as views, likes, and comments. Each user should have a personal studio dashboard connected to their profile.
 
-**Use Lovable**
+There must also be a Main Admin Studio controlled by the main administrator. This central dashboard should monitor all user studios, moderate content, manage reports, control community guidelines, and manage system settings. All creator studios should be connected to this main studio.
 
-Simply visit the [Lovable Project](https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID) and start prompting.
+The platform must support cloud media storage so users can upload videos and images without storage limitations. Free or scalable media hosting solutions such as Firebase or Cloudinary should be integrated for storing and delivering media content efficiently.
 
-Changes made via Lovable will be committed automatically to this repo.
+The interface should include the following main sections: Home Feed, Explore or Trending Videos, Create Post, Messages, Creator Studio, and Profile. The trending section should automatically show the newest and most popular videos across the platform.
 
-**Use your preferred IDE**
+Security and moderation tools must also be included to ensure safe community interaction. The system should allow reporting posts, blocking users, and filtering harmful content.
 
-If you want to work locally using your own IDE, you can clone this repo and push changes. Pushed changes will also be reflected in Lovable.
+This project was built with [Lovable](https://lovable.dev).
 
-The only requirement is having Node.js & npm installed - [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating)
+**Live app**: https://muslimcommunity.lovable.app
 
-Follow these steps:
+## Build with Lovable
+
+Continue developing this project in the [Lovable editor](https://lovable.dev/projects/6a7e7954-d266-4a98-9317-cf4ab8efefbe).
+
+- **Ship faster**: describe what you want to build and Lovable handles the code.
+- **Stay in sync**: every change made in Lovable is committed straight to this repository.
+- **Full ownership**: this code is yours. Push to `main` on GitHub and your changes sync back into Lovable, ready for your next prompt.
+
+## Development
+
+Prefer working locally? You need Node.js and npm — [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating).
 
 ```sh
-# Step 1: Clone the repository using the project's Git URL.
-git clone <YOUR_GIT_URL>
-
-# Step 2: Navigate to the project directory.
-cd <YOUR_PROJECT_NAME>
-
-# Step 3: Install the necessary dependencies.
+git clone <this-repository-url>
+cd <repository-name>
 npm i
-
-# Step 4: Start the development server with auto-reloading and an instant preview.
 npm run dev
 ```
-
-**Edit a file directly in GitHub**
-
-- Navigate to the desired file(s).
-- Click the "Edit" button (pencil icon) at the top right of the file view.
-- Make your changes and commit the changes.
-
-**Use GitHub Codespaces**
-
-- Navigate to the main page of your repository.
-- Click on the "Code" button (green button) near the top right.
-- Select the "Codespaces" tab.
-- Click on "New codespace" to launch a new Codespace environment.
-- Edit files directly within the Codespace and commit and push your changes once you're done.
-
-## What technologies are used for this project?
-
-This project is built with:
-
-- Vite
-- TypeScript
-- React
-- shadcn-ui
-- Tailwind CSS
-
-## How can I deploy this project?
-
-Simply open [Lovable](https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID) and click on Share -> Publish.
-
-## Can I connect a custom domain to my Lovable project?
-
-Yes, you can!
-
-To connect a domain, navigate to Project > Settings > Domains and click Connect Domain.
-
-Read more here: [Setting up a custom domain](https://docs.lovable.dev/features/custom-domain#custom-domain)
