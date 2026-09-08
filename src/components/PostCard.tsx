@@ -14,7 +14,7 @@ import HiringInlineCard from "@/components/HiringInlineCard";
 import { enqueue } from "@/lib/offline/queue";
 import { cacheGet, cacheSet } from "@/lib/offline/db";
 import { isMediaCached, saveForOffline } from "@/lib/offline/media";
-import { Download, WifiOff, CheckCircle2 } from "lucide-react";
+import { Download, WifiOff, CheckCircle2, RefreshCw } from "lucide-react";
 
 export interface PostWithProfile {
   id: string;
@@ -58,6 +58,7 @@ const PostCardBase = ({ post, onDelete }: { post: PostWithProfile; onDelete?: (i
   const [showMenu, setShowMenu] = useState(false);
   const [showComments, setShowComments] = useState(false);
   const [isPlaying, setIsPlaying] = useState(false);
+  const [videoFailed, setVideoFailed] = useState(false);
   const [loginPrompt, setLoginPrompt] = useState<null | string>(null);
   const [videoCached, setVideoCached] = useState(false);
   const [savingOffline, setSavingOffline] = useState(false);
@@ -189,11 +190,26 @@ const PostCardBase = ({ post, onDelete }: { post: PostWithProfile; onDelete?: (i
     }
   };
 
+  useEffect(() => {
+    if (!videoRef.current || !videoSrc) return;
+    const observer = new IntersectionObserver(([entry]) => {
+      if (!entry.isIntersecting && !videoRef.current?.paused) {
+        videoRef.current?.pause();
+        setIsPlaying(false);
+      }
+    }, { threshold: 0.35 });
+    observer.observe(videoRef.current);
+    return () => observer.disconnect();
+  }, [videoSrc]);
+
   const toggleVideo = () => {
     if (!videoRef.current) return;
-    if (isPlaying) videoRef.current.pause();
-    else videoRef.current.play();
-    setIsPlaying(!isPlaying);
+    if (isPlaying) {
+      videoRef.current.pause();
+      setIsPlaying(false);
+    } else {
+      void videoRef.current.play().then(() => setIsPlaying(true)).catch(() => setVideoFailed(true));
+    }
   };
 
   const formatCount = (n: number) => {
@@ -277,11 +293,15 @@ const PostCardBase = ({ post, onDelete }: { post: PostWithProfile; onDelete?: (i
               </div>
             ) : (
             <>
-            <button
+            {videoFailed ? (
+              <button type="button" onClick={() => { setVideoFailed(false); videoRef.current?.load(); }} className="flex h-48 w-full flex-col items-center justify-center gap-2 rounded-xl bg-secondary text-sm text-muted-foreground" aria-label="Retry video">
+                <RefreshCw className="size-5" /> Unable to play video — retry
+              </button>
+            ) : <button
               type="button"
-              onClick={() => navigate(`/reels?start=${post.id}&kind=post`)}
+              onClick={toggleVideo}
               className="block w-full"
-              aria-label="Open in Reels"
+              aria-label={isPlaying ? "Pause video" : "Play video"}
             >
               <video
                 ref={videoRef}
@@ -291,11 +311,12 @@ const PostCardBase = ({ post, onDelete }: { post: PostWithProfile; onDelete?: (i
                 muted
                 playsInline
                 preload="metadata"
+                onError={() => setVideoFailed(true)}
               />
               <span className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 flex h-14 w-14 items-center justify-center rounded-full bg-primary/80 text-primary-foreground shadow-glow">
-                <Play className="h-6 w-6 ml-0.5" />
+                {isPlaying ? <Pause className="size-6" /> : <Play className="size-6 ml-0.5" />}
               </span>
-            </button>
+            </button>}
             {videoCached ? (
               <span className="absolute bottom-5 right-6 flex items-center gap-1 rounded-full bg-background/80 px-2 py-1 text-[10px] font-medium text-primary backdrop-blur">
                 <CheckCircle2 className="h-3 w-3" /> Available offline
