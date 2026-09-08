@@ -119,8 +119,10 @@ const ReelItem = memo(({
     const v = videoRef.current;
     if (!v) return;
     if (isActive) {
-      v.play().catch(() => {});
-      setPaused(false);
+      if (v.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA) {
+        v.play().catch(() => {});
+        setPaused(false);
+      }
       if (!viewedRef.current) { viewedRef.current = true; onView(); }
     } else {
       v.pause();
@@ -179,7 +181,13 @@ const ReelItem = memo(({
           muted={muted}
           onClick={togglePlay}
           preload={isActive ? "auto" : "metadata"}
-          onLoadedData={() => { setReady(true); setFailed(false); }}
+          onLoadedData={(e) => {
+            setReady(true);
+            setFailed(false);
+            if (isActive && !document.hidden) {
+              e.currentTarget.play().then(() => setPaused(false)).catch(() => setPaused(true));
+            }
+          }}
           onError={() => { setReady(false); setFailed(true); }}
           onTimeUpdate={(e) => {
             const v = e.currentTarget;
@@ -720,7 +728,8 @@ const Reels = () => {
           ref={containerRef}
           onTouchStart={onTouchStart}
           onTouchEnd={onTouchEnd}
-          className="h-full snap-y snap-mandatory overflow-y-scroll overscroll-contain"
+          aria-label="Reels feed"
+          className="h-full snap-y snap-mandatory overflow-y-scroll overscroll-contain scroll-smooth"
           style={{ scrollbarWidth: "none" }}
         >
           {reels.map((reel, idx) => (
@@ -728,7 +737,7 @@ const Reels = () => {
               <ReelItem
                 reel={reel}
                 isActive={idx === activeIdx}
-                isNear={Math.abs(idx - activeIdx) === 1}
+                isNear={idx === activeIdx + 1}
                 muted={muted}
                 offline={!online}
                 onLike={() => handleLike(reel)}
