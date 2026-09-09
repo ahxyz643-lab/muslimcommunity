@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
-import { Search, TrendingUp, Loader2, UserPlus, UserCheck, Briefcase, HandHeart } from "lucide-react";
+import { Search, TrendingUp, Loader2, UserPlus, UserCheck, Play, HandHeart } from "lucide-react";
+import { getVideoSrc } from "@/lib/video";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
