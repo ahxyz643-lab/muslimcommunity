@@ -5,6 +5,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
 import { uploadVideoToTelegram, validateVideo } from "@/lib/video";
+import { getUserFriendlyError } from "@/lib/errors";
 
 const FILTERS = [
   { id: "none", label: "Original", css: "" },
@@ -96,18 +97,10 @@ const CreateReel = () => {
   };
 
   const handlePost = async () => {
-    if (!file) return;
+    if (!user || !file) return;
     setPosting(true);
     setUploadError(null);
     try {
-      // Read the session at submit time instead of trusting a stale context user.
-      // Supabase evaluates reels INSERT policies from the access token attached to this client.
-      const { data: authData, error: authError } = await supabase.auth.getUser();
-      const currentUser = authData.user;
-      if (authError || !currentUser) {
-        throw new Error("Your session expired. Please sign in again.");
-      }
-
       let fileId = uploadedFileIdRef.current;
       if (!fileId) {
         setStatus("PREPARING");
@@ -122,7 +115,7 @@ const CreateReel = () => {
       setStatus("PROCESSING");
 
       const { error } = await supabase.from("reels").insert({
-        user_id: currentUser.id,
+        user_id: user.id,
         video_url: "",
         telegram_file_id: fileId,
         caption: caption.trim() || null,
@@ -139,10 +132,9 @@ const CreateReel = () => {
     } catch (err: any) {
       console.error("[CreateReel]", err);
       setStatus("FAILED");
-      const rawMessage = err?.message || "";
-      const msg = /too large|supported video|session expired|cancelled|couldn't upload|Network error/i.test(rawMessage)
-        ? rawMessage
-        : "We couldn't upload your video. Please try again.";
+      const msg = /too large|supported video|session expired|cancelled|couldn't upload|Network error/i.test(err?.message || "")
+        ? err.message
+        : getUserFriendlyError(err);
       setUploadError(msg);
       toast({ title: "We couldn't publish your reel", description: msg, variant: "destructive" });
     } finally {
