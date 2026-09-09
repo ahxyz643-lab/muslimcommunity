@@ -20,7 +20,7 @@ const trendingTopics = [
 const Explore = () => {
   const [query, setQuery] = useState("");
   const [debouncedQuery, setDebouncedQuery] = useState("");
-  const [tab, setTab] = useState<"posts" | "jobs" | "donations">("posts");
+  const [tab, setTab] = useState<"posts" | "reels" | "donations">("posts");
   const { user } = useAuth();
   const { online } = useOffline();
   const queryClient = useQueryClient();
