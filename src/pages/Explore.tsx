@@ -165,15 +165,16 @@ const Explore = () => {
         ))}
       </div>
 
-      {tab === "jobs" && (
-        <div className="space-y-2 px-3">
-          {exJobs.map((j: any) => (
-            <button key={j.id} onClick={() => navigate("/jobs")} className="block w-full rounded-xl border border-border bg-card p-3 text-left">
-              <p className="text-sm font-semibold">{j.title}</p>
-              <p className="text-xs text-muted-foreground">{j.company || "—"} · {j.location || "Remote"}</p>
+      {tab === "reels" && (
+        <div className="grid grid-cols-3 gap-1 px-1">
+          {exReels.map((r: any) => (
+            <button key={r.id} onClick={() => navigate("/reels")} className="relative aspect-[9/16] overflow-hidden rounded-lg bg-secondary">
+              <video src={getVideoSrc(r)} muted playsInline preload="metadata" className="h-full w-full object-cover" />
+              <div className="absolute inset-0 bg-gradient-to-t from-black/50 to-transparent" />
+              <Play className="absolute right-1.5 top-1.5 h-3.5 w-3.5 fill-white text-white" />
             </button>
           ))}
-          {!exJobs.length && <p className="py-8 text-center text-xs text-muted-foreground">No approved jobs</p>}
+          {!exReels.length && <p className="col-span-3 py-8 text-center text-xs text-muted-foreground">No reels yet</p>}
         </div>
       )}
       {tab === "donations" && (
