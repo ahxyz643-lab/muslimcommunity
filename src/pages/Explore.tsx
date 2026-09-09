@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
-import { Search, TrendingUp, Loader2, UserPlus, UserCheck, Briefcase, HandHeart } from "lucide-react";
+import { Search, TrendingUp, Loader2, UserPlus, UserCheck, Play, HandHeart } from "lucide-react";
+import { getVideoSrc } from "@/lib/video";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
@@ -19,7 +20,7 @@ const trendingTopics = [
 const Explore = () => {
   const [query, setQuery] = useState("");
   const [debouncedQuery, setDebouncedQuery] = useState("");
-  const [tab, setTab] = useState<"posts" | "jobs" | "donations">("posts");
+  const [tab, setTab] = useState<"posts" | "reels" | "donations">("posts");
   const { user } = useAuth();
   const { online } = useOffline();
   const queryClient = useQueryClient();
@@ -89,15 +90,15 @@ const Explore = () => {
     queryClient.invalidateQueries({ queryKey: ["following-ids"] });
   };
 
-  const { data: exJobs = [] } = useQuery({
-    queryKey: ["explore-jobs"],
+  const { data: exReels = [] } = useQuery({
+    queryKey: ["explore-reels"],
     queryFn: async () => {
-      if (!navigator.onLine) return (await cacheGet<any[]>("explore:jobs")) || [];
-      const rows = (await supabase.from("jobs").select("*").eq("status", "approved").order("created_at", { ascending: false }).limit(20)).data || [];
-      void cacheSet("explore:jobs", rows);
+      if (!navigator.onLine) return (await cacheGet<any[]>("explore:reels")) || [];
+      const rows = (await supabase.from("reels").select("*").order("created_at", { ascending: false }).limit(24)).data || [];
+      void cacheSet("explore:reels", rows);
       return rows;
     },
-    enabled: tab === "jobs",
+    enabled: tab === "reels",
     staleTime: 5 * 60 * 1000,
   });
   const { data: exDonations = [] } = useQuery({
@@ -114,6 +115,36 @@ const Explore = () => {
 
   return (
     <div className="pb-20 pt-4">
+      {profiles.length > 0 && (
+        <div className="px-4 pb-4">
+          <h2 className="mb-3 text-sm font-semibold text-foreground">Community Members</h2>
+          <div className="flex gap-3 overflow-x-auto scrollbar-hide">
+            {profiles.map((p) => {
+              const isFollowing = followingIds.includes(p.user_id);
+              return (
+                <div key={p.id} className="flex w-36 flex-shrink-0 flex-col items-center gap-2 rounded-xl border border-border bg-card p-4">
+                  <button onClick={() => navigate(`/user/${p.user_id}`)}>
+                    <img src={p.avatar_url || "https://i.pravatar.cc/150"} alt={p.display_name || ""} className="h-14 w-14 rounded-full object-cover" />
+                  </button>
+                  <div className="flex items-center gap-1">
+                    <span className="truncate text-xs font-medium text-foreground">{p.display_name || "User"}</span>
+                    {p.verified && <VerifiedBadge size="sm" />}
+                  </div>
+                  <span className="text-[10px] text-muted-foreground">@{p.username || "user"}</span>
+                  <button
+                    onClick={() => handleFollow(p.user_id)}
+                    className={`mt-1 flex items-center gap-1 rounded-full px-3 py-1 text-[10px] font-semibold transition-all ${
+                      isFollowing ? "bg-secondary text-secondary-foreground" : "bg-primary text-primary-foreground"
+                    }`}
+                  >
+                    {isFollowing ? <><UserCheck className="h-3 w-3" />Following</> : <><UserPlus className="h-3 w-3" />Follow</>}
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
       <div className="px-4 pb-4">
         <div className="flex items-center gap-3 rounded-xl bg-secondary px-4 py-3">
           <Search className="h-5 w-5 text-muted-foreground" />
@@ -124,7 +155,7 @@ const Explore = () => {
       <div className="mb-3 flex gap-2 px-4">
         {[
           { id: "posts", label: "Posts", icon: TrendingUp },
-          { id: "jobs", label: "Jobs", icon: Briefcase },
+          { id: "reels", label: "Reels", icon: Play },
           { id: "donations", label: "Donate", icon: HandHeart },
         ].map((t) => (
           <button key={t.id} onClick={() => setTab(t.id as any)}
@@ -134,15 +165,16 @@ const Explore = () => {
         ))}
       </div>
 
-      {tab === "jobs" && (
-        <div className="space-y-2 px-3">
-          {exJobs.map((j: any) => (
-            <button key={j.id} onClick={() => navigate("/jobs")} className="block w-full rounded-xl border border-border bg-card p-3 text-left">
-              <p className="text-sm font-semibold">{j.title}</p>
-              <p className="text-xs text-muted-foreground">{j.company || "—"} · {j.location || "Remote"}</p>
+      {tab === "reels" && (
+        <div className="grid grid-cols-3 gap-1 px-1">
+          {exReels.map((r: any) => (
+            <button key={r.id} onClick={() => navigate("/reels")} className="relative aspect-[9/16] overflow-hidden rounded-lg bg-secondary">
+              <video src={getVideoSrc(r)} muted playsInline preload="metadata" className="h-full w-full object-cover" />
+              <div className="absolute inset-0 bg-gradient-to-t from-black/50 to-transparent" />
+              <Play className="absolute right-1.5 top-1.5 h-3.5 w-3.5 fill-white text-white" />
             </button>
           ))}
-          {!exJobs.length && <p className="py-8 text-center text-xs text-muted-foreground">No approved jobs</p>}
+          {!exReels.length && <p className="col-span-3 py-8 text-center text-xs text-muted-foreground">No reels yet</p>}
         </div>
       )}
       {tab === "donations" && (
@@ -173,38 +205,6 @@ const Explore = () => {
         </div>
       </div>
 
-      {profiles.length > 0 && (
-        <div className="px-4 pb-4">
-          <h2 className="mb-3 text-sm font-semibold text-foreground">Community Members</h2>
-          <div className="flex gap-3 overflow-x-auto scrollbar-hide">
-            {profiles.map((p) => {
-              const isFollowing = followingIds.includes(p.user_id);
-              return (
-                <div key={p.id} className="flex w-36 flex-shrink-0 flex-col items-center gap-2 rounded-xl bg-card p-4 border border-border">
-                  <button onClick={() => navigate(`/user/${p.user_id}`)}>
-                    <img src={p.avatar_url || "https://i.pravatar.cc/150"} alt={p.display_name || ""} className="h-14 w-14 rounded-full object-cover" />
-                  </button>
-                  <div className="flex items-center gap-1">
-                    <span className="truncate text-xs font-medium text-foreground">{p.display_name || "User"}</span>
-                    {p.verified && <VerifiedBadge size="sm" />}
-                  </div>
-                  <span className="text-[10px] text-muted-foreground">@{p.username || "user"}</span>
-                  <button
-                    onClick={() => handleFollow(p.user_id)}
-                    className={`mt-1 flex items-center gap-1 rounded-full px-3 py-1 text-[10px] font-semibold transition-all ${
-                      isFollowing
-                        ? "bg-secondary text-secondary-foreground"
-                        : "bg-primary text-primary-foreground"
-                    }`}
-                  >
-                    {isFollowing ? <><UserCheck className="h-3 w-3" />Following</> : <><UserPlus className="h-3 w-3" />Follow</>}
-                  </button>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      )}
 
       <div>
         <h2 className="mb-3 px-4 text-sm font-semibold text-foreground">{query ? "Search Results" : "Popular Posts"}</h2>
