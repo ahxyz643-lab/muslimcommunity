@@ -205,38 +205,6 @@ const Explore = () => {
         </div>
       </div>
 
-      {profiles.length > 0 && (
-        <div className="px-4 pb-4">
-          <h2 className="mb-3 text-sm font-semibold text-foreground">Community Members</h2>
-          <div className="flex gap-3 overflow-x-auto scrollbar-hide">
-            {profiles.map((p) => {
-              const isFollowing = followingIds.includes(p.user_id);
-              return (
-                <div key={p.id} className="flex w-36 flex-shrink-0 flex-col items-center gap-2 rounded-xl bg-card p-4 border border-border">
-                  <button onClick={() => navigate(`/user/${p.user_id}`)}>
-                    <img src={p.avatar_url || "https://i.pravatar.cc/150"} alt={p.display_name || ""} className="h-14 w-14 rounded-full object-cover" />
-                  </button>
-                  <div className="flex items-center gap-1">
-                    <span className="truncate text-xs font-medium text-foreground">{p.display_name || "User"}</span>
-                    {p.verified && <VerifiedBadge size="sm" />}
-                  </div>
-                  <span className="text-[10px] text-muted-foreground">@{p.username || "user"}</span>
-                  <button
-                    onClick={() => handleFollow(p.user_id)}
-                    className={`mt-1 flex items-center gap-1 rounded-full px-3 py-1 text-[10px] font-semibold transition-all ${
-                      isFollowing
-                        ? "bg-secondary text-secondary-foreground"
-                        : "bg-primary text-primary-foreground"
-                    }`}
-                  >
-                    {isFollowing ? <><UserCheck className="h-3 w-3" />Following</> : <><UserPlus className="h-3 w-3" />Follow</>}
-                  </button>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      )}
 
       <div>
         <h2 className="mb-3 px-4 text-sm font-semibold text-foreground">{query ? "Search Results" : "Popular Posts"}</h2>
