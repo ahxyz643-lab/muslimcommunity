@@ -119,6 +119,19 @@ const Auth = () => {
             </svg>
             Continue with Apple
           </button>
+          <button
+            onClick={handleMicrosoftSignIn}
+            className="flex w-full items-center justify-center gap-3 rounded-xl border border-border bg-card py-3 text-sm font-medium text-foreground transition-colors hover:bg-secondary"
+          >
+            <svg className="h-5 w-5" viewBox="0 0 21 21" fill="currentColor">
+              <path fill="#f25022" d="M1 1h9v9H1z"/>
+              <path fill="#00a4ef" d="M1 11h9v9H1z"/>
+              <path fill="#7fba00" d="M11 1h9v9h-9z"/>
+              <path fill="#ffb900" d="M11 11h9v9h-9z"/>
+            </svg>
+            Continue with Microsoft
+          </button>
+
         </div>
 
         <div className="flex items-center gap-3">
