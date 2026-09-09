@@ -77,9 +77,6 @@ const ReelsPreviewBar = () => {
               />
               <span className="truncate text-[10px] font-medium text-white drop-shadow-md">@{r.username || "user"}</span>
             </div>
-            <div className="absolute right-1.5 top-1.5 rounded-full bg-black/40 p-1 backdrop-blur-sm">
-              <Play className="h-3 w-3 fill-white text-white" />
-            </div>
           </button>
         ))}
       </div>
