@@ -90,15 +90,15 @@ const Explore = () => {
     queryClient.invalidateQueries({ queryKey: ["following-ids"] });
   };
 
-  const { data: exJobs = [] } = useQuery({
-    queryKey: ["explore-jobs"],
+  const { data: exReels = [] } = useQuery({
+    queryKey: ["explore-reels"],
     queryFn: async () => {
-      if (!navigator.onLine) return (await cacheGet<any[]>("explore:jobs")) || [];
-      const rows = (await supabase.from("jobs").select("*").eq("status", "approved").order("created_at", { ascending: false }).limit(20)).data || [];
-      void cacheSet("explore:jobs", rows);
+      if (!navigator.onLine) return (await cacheGet<any[]>("explore:reels")) || [];
+      const rows = (await supabase.from("reels").select("*").order("created_at", { ascending: false }).limit(24)).data || [];
+      void cacheSet("explore:reels", rows);
       return rows;
     },
-    enabled: tab === "jobs",
+    enabled: tab === "reels",
     staleTime: 5 * 60 * 1000,
   });
   const { data: exDonations = [] } = useQuery({
