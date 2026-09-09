@@ -72,6 +72,16 @@ const Auth = () => {
     }
   };
 
+  const handleMicrosoftSignIn = async () => {
+    const { error } = await lovable.auth.signInWithOAuth("microsoft", {
+      redirect_uri: window.location.origin,
+    });
+    if (error) {
+      toast({ title: "Error", description: error.message, variant: "destructive" });
+    }
+  };
+
+
   return (
     <div className="flex min-h-screen flex-col items-center justify-center px-6">
       <div className="w-full max-w-sm space-y-8">
