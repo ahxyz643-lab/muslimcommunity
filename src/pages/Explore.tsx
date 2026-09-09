@@ -155,7 +155,7 @@ const Explore = () => {
       <div className="mb-3 flex gap-2 px-4">
         {[
           { id: "posts", label: "Posts", icon: TrendingUp },
-          { id: "jobs", label: "Jobs", icon: Briefcase },
+          { id: "reels", label: "Reels", icon: Play },
           { id: "donations", label: "Donate", icon: HandHeart },
         ].map((t) => (
           <button key={t.id} onClick={() => setTab(t.id as any)}
