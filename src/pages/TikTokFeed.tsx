@@ -32,10 +32,10 @@ const compact = (n?: number) => (typeof n === "number" ? Intl.NumberFormat("en",
 
 const TikTokFeed = () => {
   const navigate = useNavigate();
-  useSeo({
-    title: "TikTok Videos | Muslim Community",
-    description: "Watch the latest TikTok videos from the Muslim Community account, all in one place.",
-  });
+  useSeo(
+    "TikTok Videos | Muslim Community",
+    "Watch the latest TikTok videos from the Muslim Community account, all in one place.",
+  );
 
   const { data, isLoading, isError, refetch, isFetching } = useQuery({
     queryKey: ["tiktok-videos"],

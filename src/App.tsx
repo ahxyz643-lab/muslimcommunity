@@ -33,6 +33,7 @@ const Employer = lazy(() => import("@/pages/Employer"));
 const Reels = lazy(() => import("@/pages/Reels"));
 const CreateReel = lazy(() => import("@/pages/CreateReel"));
 const Donations = lazy(() => import("@/pages/Donations"));
+const TikTokFeed = lazy(() => import("@/pages/TikTokFeed"));
 const AdminLayout = lazy(() => import("@/components/admin/AdminLayout"));
 const AdminDashboard = lazy(() => import("@/pages/admin/AdminDashboard"));
 const AdminUsers = lazy(() => import("@/pages/admin/AdminUsers"));
@@ -120,6 +121,7 @@ const AppRoutes = () => {
         <Route path="/reels/create" element={<ProtectedRoute><CreateReel /></ProtectedRoute>} />
         <Route path="/jobs" element={<Jobs />} />
         <Route path="/donations" element={<Donations />} />
+        <Route path="/tiktok" element={<TikTokFeed />} />
         <Route path="*" element={<NotFound />} />
       </Routes>
       </Suspense>
