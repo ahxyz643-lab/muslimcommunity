@@ -549,7 +549,7 @@ const Reels = () => {
       setRefreshing(false);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user, online, hasMore, hydrate, startId]);
+  }, [user, online, hasMore, hydrate, startId, reels]);
 
   // Initial load (also loads the viewer's block list so blocked creators stay hidden).
   useEffect(() => {
@@ -563,7 +563,7 @@ const Reels = () => {
     })();
     return () => { cancelled = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user?.id]);
+  }, [user?.id, startId]);
 
   // Load more as the user approaches the end.
   useEffect(() => {
