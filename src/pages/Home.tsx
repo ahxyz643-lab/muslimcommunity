@@ -1,7 +1,6 @@
 import { useEffect, useState, useRef, useCallback, Fragment } from "react";
 import TopBar from "@/components/TopBar";
 import PostCard, { PostWithProfile } from "@/components/PostCard";
-import ReelsPreviewBar from "@/components/ReelsPreviewBar";
 import StoriesBar from "@/components/StoriesBar";
 import GuestHero from "@/components/GuestHero";
 import JobInlineCard from "@/components/JobInlineCard";
@@ -131,7 +130,6 @@ const Home = () => {
         />
       )}
       <StoriesBar />
-      <ReelsPreviewBar />
       {loading ? (
         <div className="flex items-center justify-center py-20"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>
       ) : posts.length === 0 ? (
@@ -144,9 +142,6 @@ const Home = () => {
           {posts.map((post, idx) => (
             <Fragment key={post.id}>
               <PostCard post={post} onDelete={handleDelete} />
-              {(idx + 1) % 5 === 0 && idx !== posts.length - 1 && (
-                <ReelsPreviewBar />
-              )}
               {(idx + 1) % 10 === 0 && idx !== posts.length - 1 && (
                 ((idx + 1) / 10) % 2 === 1 ? <JobInlineCard /> : <DonationInlineCard />
               )}
