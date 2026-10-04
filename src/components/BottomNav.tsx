@@ -1,13 +1,12 @@
-import { Home, Compass, Briefcase, HandHeart, User, Plus } from "lucide-react";
+import { Home, Compass, Clapperboard, User, Plus } from "lucide-react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 
 const navItems = [
   { icon: Home, label: "Home", path: "/" },
-  { icon: Compass, label: "Explore", path: "/explore" },
+  { icon: Clapperboard, label: "Reels", path: "/reels" },
   { icon: Plus, label: "Create", path: "/create" },
-  { icon: Briefcase, label: "Jobs", path: "/jobs" },
-  { icon: HandHeart, label: "Donate", path: "/donations" },
+  { icon: Compass, label: "Explore", path: "/explore" },
   { icon: User, label: "Profile", path: "/profile" },
 ];
 
