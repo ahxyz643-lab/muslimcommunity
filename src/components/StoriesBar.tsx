@@ -91,35 +91,31 @@ const StoriesBar = () => {
 
   return (
     <>
-      <div className="flex gap-3 overflow-x-auto px-4 py-3 scrollbar-hide">
-        {/* Your Story */}
-        <button onClick={() => user ? fileRef.current?.click() : toast({ title: "Sign in to add a story" })} aria-label="Add story" className="flex flex-col items-center gap-1">
-          <div className="relative h-16 w-16 flex-shrink-0 rounded-full bg-gradient-to-tr from-primary to-accent p-[2px]">
-            <img
-              src={currentProfile?.avatar_url || user?.user_metadata?.avatar_url || "https://i.pravatar.cc/150"}
-              alt="Your story"
-              className="h-full w-full rounded-full border-2 border-card object-cover"
-            />
-            <div className="absolute -bottom-0.5 -right-0.5 flex h-5 w-5 items-center justify-center rounded-full bg-primary">
-              {uploading ? <Loader2 className="h-3 w-3 animate-spin text-primary-foreground"/> : <span className="text-xs text-primary-foreground font-bold">+</span>}
-            </div>
+      <div className="flex gap-2 overflow-x-auto px-3 py-3 scrollbar-hide">
+        {/* Your Story — same size as reel cards */}
+        <button
+          onClick={() => user ? fileRef.current?.click() : toast({ title: "Sign in to add a story" })}
+          aria-label="Add story"
+          className="relative flex h-40 w-28 flex-shrink-0 flex-col items-center justify-center gap-2 overflow-hidden rounded-2xl border-2 border-dashed border-border bg-secondary/30 transition-all hover:border-primary hover:bg-secondary"
+        >
+          <img
+            src={currentProfile?.avatar_url || user?.user_metadata?.avatar_url || "https://i.pravatar.cc/150"}
+            alt="Your story"
+            className="h-12 w-12 rounded-full object-cover ring-2 ring-primary"
+          />
+          <div className="gradient-primary flex h-8 w-8 items-center justify-center rounded-xl shadow-glow">
+            {uploading ? <Loader2 className="h-4 w-4 animate-spin text-primary-foreground"/> : <span className="text-base font-bold text-primary-foreground">+</span>}
           </div>
-          <span className="w-16 truncate text-center text-[11px] text-muted-foreground">Your Story</span>
+          <span className="text-[11px] font-medium text-foreground">Your Story</span>
         </button>
-        {currentProfile && (
-          <button onClick={() => setViewer({ profile: currentProfile, idx: 0 })} className="flex flex-col items-center gap-1">
-            <div className="h-16 w-16 flex-shrink-0 rounded-full bg-gradient-to-tr from-primary to-accent p-[2px]">
-              <img src={currentProfile.avatar_url || "https://i.pravatar.cc/150"} alt="Your story" className="h-full w-full rounded-full border-2 border-card object-cover"/>
-            </div>
-            <span className="w-16 truncate text-center text-[11px] text-muted-foreground">You</span>
-          </button>
-        )}
-        {otherProfiles.map((p) => (
-          <button key={p.user_id} onClick={() => setViewer({ profile: p, idx: 0 })} className="flex flex-col items-center gap-1">
-            <div className="h-16 w-16 flex-shrink-0 rounded-full bg-gradient-to-tr from-primary to-accent p-[2px]">
-              <img src={p.avatar_url || "https://i.pravatar.cc/150"} alt={p.display_name || ""} className="h-full w-full rounded-full border-2 border-card object-cover"/>
-            </div>
-            <span className="w-16 truncate text-center text-[11px] text-muted-foreground">{p.username?.split("_")[0] || "user"}</span>
+        {[...(currentProfile ? [{ p: currentProfile, label: "You" }] : []), ...otherProfiles.map((p) => ({ p, label: p.username?.split("_")[0] || "user" }))].map(({ p, label }) => (
+          <button
+            key={p.user_id + label}
+            onClick={() => setViewer({ profile: p, idx: 0 })}
+            className="relative h-40 w-28 flex-shrink-0 overflow-hidden rounded-2xl bg-gradient-to-tr from-primary to-accent p-[2px]"
+          >
+            <img src={p.avatar_url || "https://i.pravatar.cc/150"} alt={label} className="h-full w-full rounded-2xl object-cover"/>
+            <span className="absolute bottom-2 left-2 right-2 truncate text-left text-[11px] font-semibold text-white drop-shadow-md">{label}</span>
           </button>
         ))}
 

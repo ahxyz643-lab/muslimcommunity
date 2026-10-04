@@ -46,15 +46,6 @@ const ReelsPreviewBar = () => {
         <button onClick={() => navigate("/reels")} className="text-xs font-medium text-primary">See all</button>
       </div>
       <div className="flex gap-2 overflow-x-auto pb-1" style={{ scrollbarWidth: "none" }}>
-        <button
-          onClick={() => navigate("/reels/create")}
-          className="flex h-40 w-28 flex-shrink-0 flex-col items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-border bg-secondary/30 transition-all hover:border-primary hover:bg-secondary"
-        >
-          <div className="gradient-primary flex h-10 w-10 items-center justify-center rounded-xl shadow-glow">
-            <Plus className="h-5 w-5 text-primary-foreground" />
-          </div>
-          <span className="text-[11px] font-medium text-foreground">Create</span>
-        </button>
         {reels.map((r) => (
           <button
             key={r.id}
