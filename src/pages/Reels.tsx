@@ -478,46 +478,68 @@ const Reels = () => {
 
   const fetchPage = useCallback(async (reset = false) => {
     if (fetching.current) return;
-    if (!reset && !hasMore) return;
     if (!online && !reset) return;
     fetching.current = true;
     if (reset) { offsetRef.current = 0; seenRef.current = new Set(); }
     else setLoadingMore(true);
+    const BATCH = PAGE_SIZE * 3;
+    const shuffle = <T,>(a: T[]) => { const b = [...a]; for (let i = b.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [b[i], b[j]] = [b[j], b[i]]; } return b; };
 
     try {
-      let rows: any[] = [];
-      if (user) {
-        const { data } = await supabase.rpc("get_personalized_feed", {
-          _user_id: user.id, _limit: PAGE_SIZE, _offset: offsetRef.current, _videos_only: true,
-        });
-        rows = data || [];
-      }
-      if (!rows.length) {
-        const { data } = await supabase
-          .from("reels").select("*")
-          .order("created_at", { ascending: false })
-          .range(offsetRef.current, offsetRef.current + PAGE_SIZE - 1);
-        rows = (data || []).map((r: any) => ({ ...r, kind: "reel", content: r.caption }));
+      const fetchRows = async (offset: number) => {
+        let rows: any[] = [];
+        if (user) {
+          const { data } = await supabase.rpc("get_personalized_feed", {
+            _user_id: user.id, _limit: BATCH, _offset: offset, _videos_only: true,
+          });
+          rows = data || [];
+        }
+        if (!rows.length) {
+          const { data } = await supabase
+            .from("reels").select("*").eq("hidden", false)
+            .order("created_at", { ascending: false })
+            .range(offset, offset + BATCH - 1);
+          rows = (data || []).map((r: any) => ({ ...r, kind: "reel", content: r.caption }));
+        }
+        return rows;
+      };
+
+      let rows = await fetchRows(offsetRef.current);
+      offsetRef.current += BATCH;
+      // Infinite loop: when the catalogue runs out, wrap around and replay in a new random order.
+      if (rows.length < BATCH && !reset) {
+        offsetRef.current = 0;
+        const keep = new Set(reels.slice(-3).map((r) => r.id));
+        seenRef.current = keep;
+        if (!rows.length) { rows = await fetchRows(0); offsetRef.current = BATCH; }
       }
 
-      offsetRef.current += PAGE_SIZE;
+      // Opened from a specific video: load it explicitly so it always plays first.
+      let startRow: any = null;
+      if (reset && startId) {
+        const kind = params.get("kind");
+        if (kind !== "post") {
+          const { data } = await supabase.from("reels").select("*").eq("id", startId).maybeSingle();
+          if (data) startRow = { ...data, kind: "reel", content: data.caption };
+        }
+        if (!startRow) {
+          const { data } = await supabase.from("posts").select("*").eq("id", startId).maybeSingle();
+          if (data) startRow = { ...data, kind: "post" };
+        }
+      }
+
       const hidden = new Set(readHidden());
-      const fresh = rows.filter(
-        (r) => !seenRef.current.has(r.id) && !hidden.has(r.id) && !blockedRef.current.has(r.user_id)
-      );
+      let fresh = shuffle(rows.filter(
+        (r) => r.id !== startRow?.id && !seenRef.current.has(r.id) && !hidden.has(r.id) && !blockedRef.current.has(r.user_id)
+      ));
+      if (startRow) fresh = [startRow, ...fresh];
       fresh.forEach((r) => seenRef.current.add(r.id));
 
       const items = await hydrate(fresh);
-      setHasMore(rows.length >= PAGE_SIZE);
+      setHasMore(true);
 
-      setReels((prev) => {
-        let next = reset ? items : [...prev, ...items];
-        if (reset && startId) {
-          const idx = next.findIndex((i) => i.id === startId);
-          if (idx > 0) next = [next[idx], ...next.slice(0, idx), ...next.slice(idx + 1)];
-        }
-        return next;
-      });
+      setReels((prev) => (reset ? items : [...prev, ...items]));
+
     } catch {
       if (online) toast({ title: "Couldn't load reels", description: "Please try again.", variant: "destructive" });
     } finally {
@@ -527,7 +549,7 @@ const Reels = () => {
       setRefreshing(false);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user, online, hasMore, hydrate, startId]);
+  }, [user, online, hasMore, hydrate, startId, reels]);
 
   // Initial load (also loads the viewer's block list so blocked creators stay hidden).
   useEffect(() => {
@@ -541,7 +563,7 @@ const Reels = () => {
     })();
     return () => { cancelled = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user?.id]);
+  }, [user?.id, startId]);
 
   // Load more as the user approaches the end.
   useEffect(() => {

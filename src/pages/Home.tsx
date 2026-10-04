@@ -14,6 +14,7 @@ import { cacheGet, cacheSet } from "@/lib/offline/db";
 import { useOffline } from "@/hooks/useOffline";
 
 const PAGE_SIZE = 15;
+const shuffle = <T,>(a: T[]) => { const b = [...a]; for (let i = b.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [b[i], b[j]] = [b[j], b[i]]; } return b; };
 
 const Home = () => {
   const { user } = useAuth();
@@ -40,18 +41,18 @@ const Home = () => {
       if (userIds.length === 0) return [];
       const { data: profiles } = await supabase.from("profiles").select("user_id, username, display_name, avatar_url, verified").in("user_id", userIds);
       const map = new Map(profiles?.map((p) => [p.user_id, p]) || []);
-      return rows.map((p: any) => ({ ...p, language: null, updated_at: p.created_at, profiles: map.get(p.user_id) || null }));
+      return shuffle(rows).map((p: any) => ({ ...p, language: null, updated_at: p.created_at, profiles: map.get(p.user_id) || null }));
     }
-    return fetchPostsWithProfiles(
+    return shuffle(await fetchPostsWithProfiles(
       supabase.from("posts").select("*").order("created_at", { ascending: false }).range(offset, offset + PAGE_SIZE - 1),
-    );
+    ));
   }, [user?.id]);
 
   const loadPosts = useCallback(async () => {
     // 1) paint instantly from cache, 2) refresh from network when possible
     const cached = await cacheGet<PostWithProfile[]>(cacheKey);
     if (cached?.length) {
-      setPosts((prev) => (prev.length ? prev : cached));
+      setPosts((prev) => (prev.length ? prev : shuffle(cached)));
       offsetRef.current = Math.max(offsetRef.current, cached.length);
       setLoading(false);
     }

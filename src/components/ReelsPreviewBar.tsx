@@ -49,7 +49,7 @@ const ReelsPreviewBar = () => {
         {reels.map((r) => (
           <button
             key={r.id}
-            onClick={() => navigate("/reels")}
+            onClick={() => navigate(`/reels?start=${r.id}&kind=${(r as any).kind || "reel"}`)}
             className="group relative h-40 w-28 flex-shrink-0 overflow-hidden rounded-2xl bg-secondary"
           >
             <video
