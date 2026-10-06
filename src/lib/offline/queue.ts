@@ -67,8 +67,26 @@ const BASE_DELAY = 2000;
  * already queued (e.g. like then unlike) the newer one replaces it, so the server
  * never receives duplicate/conflicting writes.
  */
+// Toggle-style actions are batched: they wait locally and flush every 5 minutes,
+// when the app is hidden/closed, or when the queue gets large.
+const BATCHED: Partial<Record<ActionType, ActionType>> = {
+  like: "unlike", unlike: "like", save: "unsave", unsave: "save",
+  repost: "unrepost", unrepost: "repost", follow: "unfollow", unfollow: "follow",
+};
+// Comments use a short window so others see them quickly, while still batching bursts.
+const COMMENT_DELAY = 10_000;
+const BATCH_INTERVAL = 5 * 60_000;
+const MAX_QUEUE_BEFORE_FLUSH = 25;
+let commentTimer: number | undefined;
+
 export async function enqueue(type: ActionType, key: string, payload: any) {
   const existing = await queueFindByKey(key);
+  // Like -> Unlike (or vice-versa) before sync: the two cancel out, nothing hits the server.
+  if (existing && BATCHED[type] && BATCHED[type] === existing.type) {
+    await queueDelete(existing.id);
+    await refreshCounts();
+    return;
+  }
   const action: QueuedAction = {
     id: existing?.id || crypto.randomUUID(),
     key,
@@ -80,27 +98,46 @@ export async function enqueue(type: ActionType, key: string, payload: any) {
   };
   await queuePut(action);
   await refreshCounts();
-  if (state.online) void syncNow();
+  if (!state.online) return;
+  if (BATCHED[type]) {
+    if (state.pending >= MAX_QUEUE_BEFORE_FLUSH) void syncNow();
+  } else if (type === "comment" || type === "reel_comment") {
+    window.clearTimeout(commentTimer);
+    commentTimer = window.setTimeout(() => void syncNow(), COMMENT_DELAY);
+  } else void syncNow();
+}
+
+/** Cancel a queued comment that the user deleted before it was synced. Returns true if cancelled. */
+export async function cancelQueuedComment(commentId: string) {
+  const all = await queueAll();
+  const hit = all.find((a) => (a.type === "comment" || a.type === "reel_comment") && a.payload?.id === commentId);
+  if (!hit) return false;
+  await queueDelete(hit.id);
+  await refreshCounts();
+  return true;
+}
+
+/** Whether a toggle (like/save/...) is still waiting locally — UI uses this so a refetch doesn't revert it. */
+export async function pendingStateFor(key: string): Promise<ActionType | null> {
+  const a = await queueFindByKey(key);
+  return (a?.type as ActionType) || null;
 }
 
 const executors: Record<ActionType, (p: any) => Promise<void>> = {
   like: async (p) => {
-    const { data } = await supabase.from("likes").select("id").eq("user_id", p.user_id).eq("post_id", p.post_id).maybeSingle();
-    if (!data) await throwOn(supabase.from("likes").insert({ user_id: p.user_id, post_id: p.post_id }));
+    await throwOn(supabase.from("likes").upsert({ user_id: p.user_id, post_id: p.post_id }, { onConflict: "user_id,post_id", ignoreDuplicates: true }));
   },
   unlike: async (p) => {
     await throwOn(supabase.from("likes").delete().eq("user_id", p.user_id).eq("post_id", p.post_id));
   },
   save: async (p) => {
-    const { data } = await supabase.from("saves").select("id").eq("user_id", p.user_id).eq("post_id", p.post_id).maybeSingle();
-    if (!data) await throwOn(supabase.from("saves").insert({ user_id: p.user_id, post_id: p.post_id }));
+    await throwOn(supabase.from("saves").upsert({ user_id: p.user_id, post_id: p.post_id }, { onConflict: "user_id,post_id", ignoreDuplicates: true }));
   },
   unsave: async (p) => {
     await throwOn(supabase.from("saves").delete().eq("user_id", p.user_id).eq("post_id", p.post_id));
   },
   repost: async (p) => {
-    const { data } = await supabase.from("reposts").select("id").eq("user_id", p.user_id).eq("post_id", p.post_id).maybeSingle();
-    if (!data) await throwOn(supabase.from("reposts").insert({ user_id: p.user_id, post_id: p.post_id }));
+    await throwOn(supabase.from("reposts").upsert({ user_id: p.user_id, post_id: p.post_id }, { onConflict: "user_id,post_id", ignoreDuplicates: true }));
   },
   unrepost: async (p) => {
     await throwOn(supabase.from("reposts").delete().eq("user_id", p.user_id).eq("post_id", p.post_id));
@@ -114,15 +151,17 @@ const executors: Record<ActionType, (p: any) => Promise<void>> = {
   },
   comment: async (p) => {
     // client-generated id makes retries idempotent
-    const { data } = await supabase.from("comments").select("id").eq("id", p.id).maybeSingle();
-    if (!data)
-      await throwOn(
-        supabase.from("comments").insert({ id: p.id, post_id: p.post_id, user_id: p.user_id, content: p.content, parent_id: p.parent_id ?? null }),
-      );
+    await throwOn(
+      supabase.from("comments").upsert(
+        { id: p.id, post_id: p.post_id, user_id: p.user_id, content: p.content, parent_id: p.parent_id ?? null },
+        { onConflict: "id", ignoreDuplicates: true },
+      ),
+    );
   },
   reel_comment: async (p) => {
-    const { data } = await supabase.from("reel_comments").select("id").eq("id", p.id).maybeSingle();
-    if (!data) await throwOn(supabase.from("reel_comments").insert({ id: p.id, reel_id: p.reel_id, user_id: p.user_id, content: p.content }));
+    await throwOn(
+      supabase.from("reel_comments").upsert({ id: p.id, reel_id: p.reel_id, user_id: p.user_id, content: p.content }, { onConflict: "id", ignoreDuplicates: true }),
+    );
   },
   profile_update: async (p) => {
     await throwOn(supabase.from("profiles").update(p.values).eq("user_id", p.user_id));
@@ -195,12 +234,14 @@ export function startOfflineEngine() {
   const goOffline = () => setState({ online: false });
   window.addEventListener("online", goOnline);
   window.addEventListener("offline", goOffline);
+  // flush when the user leaves / backgrounds the app
   document.addEventListener("visibilitychange", () => {
-    if (document.visibilityState === "visible" && navigator.onLine) void syncNow();
+    if (document.visibilityState === "hidden" && navigator.onLine) void syncNow();
   });
-  // retry timer covers backoff windows and flaky connections
+  window.addEventListener("pagehide", () => { if (navigator.onLine) void syncNow(); });
+  // periodic batch flush (also covers retry backoff windows)
   window.setInterval(() => {
-    if (navigator.onLine) void syncNow();
-  }, 15000);
+    if (navigator.onLine && state.pending > 0) void syncNow();
+  }, BATCH_INTERVAL);
   if (navigator.onLine) void syncNow();
 }
