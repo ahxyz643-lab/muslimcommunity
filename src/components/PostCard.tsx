@@ -12,6 +12,7 @@ import FollowButton from "@/components/FollowButton";
 import LoginPromptDialog from "@/components/LoginPromptDialog";
 import HiringInlineCard from "@/components/HiringInlineCard";
 import { enqueue } from "@/lib/offline/queue";
+import { getPostState, patchPostState } from "@/lib/postState";
 import { cacheGet, cacheSet } from "@/lib/offline/db";
 import { isMediaCached, saveForOffline } from "@/lib/offline/media";
 import { Download, WifiOff, CheckCircle2 } from "lucide-react";
@@ -80,7 +81,7 @@ const PostCardBase = ({ post, onDelete }: { post: PostWithProfile; onDelete?: (i
     return () => { cancelled = true; };
   }, [videoSrc]);
 
-  // Check initial status
+  // Check initial status (batched across all visible posts)
   useEffect(() => {
     if (!user) return;
     const key = `post-state:${user.id}:${post.id}`;
@@ -91,81 +92,41 @@ const PostCardBase = ({ post, onDelete }: { post: PostWithProfile; onDelete?: (i
       return;
     }
     let cancelled = false;
-    const state = { liked: false, saved: false, reposted: false };
-    supabase.from("likes").select("id").eq("user_id", user.id).eq("post_id", post.id).maybeSingle()
-      .then(({ data }) => { if (cancelled) return; state.liked = !!data; if (data) setLiked(true); void cacheSet(key, state); });
-    supabase.from("saves").select("id").eq("user_id", user.id).eq("post_id", post.id).maybeSingle()
-      .then(({ data }) => { if (cancelled) return; state.saved = !!data; if (data) setSaved(true); void cacheSet(key, state); });
-    supabase.from("reposts").select("id").eq("user_id", user.id).eq("post_id", post.id).maybeSingle()
-      .then(({ data }) => { if (cancelled) return; state.reposted = !!data; if (data) setReposted(true); void cacheSet(key, state); });
+    void getPostState(user.id, post.id).then((s) => {
+      if (cancelled) return;
+      setLiked(s.liked); setSaved(s.saved); setReposted(s.reposted);
+      void cacheSet(key, s);
+    });
     return () => { cancelled = true; };
   }, [user?.id, post.id]);
 
+  // Toggles update the UI instantly and are queued; the queue merges/cancels and syncs in batches.
   const handleLike = async () => {
     if (!user) { setLoginPrompt("like posts"); return; }
-    if (!navigator.onLine) {
-      const next = !liked;
-      setLiked(next);
-      setLikesCount((c) => Math.max(0, c + (next ? 1 : -1)));
-      await enqueue(next ? "like" : "unlike", `like:${user.id}:${post.id}`, { user_id: user.id, post_id: post.id });
-      return;
-    }
-    if (liked) {
-      await supabase.from("likes").delete().eq("user_id", user.id).eq("post_id", post.id);
-      setLiked(false);
-      setLikesCount((c) => Math.max(0, c - 1));
-    } else {
-      // Check if already liked (prevent duplicate)
-      const { data: existing } = await supabase.from("likes").select("id").eq("user_id", user.id).eq("post_id", post.id).maybeSingle();
-      if (existing) return;
-      await supabase.from("likes").insert({ user_id: user.id, post_id: post.id });
-      setLiked(true);
-      setLikesCount((c) => c + 1);
-    }
+    const next = !liked;
+    setLiked(next);
+    setLikesCount((c) => Math.max(0, c + (next ? 1 : -1)));
+    patchPostState(user.id, post.id, { liked: next });
+    await enqueue(next ? "like" : "unlike", `like:${user.id}:${post.id}`, { user_id: user.id, post_id: post.id });
   };
 
   const handleSave = async () => {
     if (!user) { setLoginPrompt("save posts"); return; }
-    if (!navigator.onLine) {
-      const next = !saved;
-      setSaved(next);
-      setSavesCount((c) => Math.max(0, c + (next ? 1 : -1)));
-      await enqueue(next ? "save" : "unsave", `save:${user.id}:${post.id}`, { user_id: user.id, post_id: post.id });
-      return;
-    }
-    if (saved) {
-      await supabase.from("saves").delete().eq("user_id", user.id).eq("post_id", post.id);
-      setSaved(false);
-      setSavesCount((c) => Math.max(0, c - 1));
-    } else {
-      await supabase.from("saves").insert({ user_id: user.id, post_id: post.id });
-      setSaved(true);
-      setSavesCount((c) => c + 1);
-    }
+    const next = !saved;
+    setSaved(next);
+    setSavesCount((c) => Math.max(0, c + (next ? 1 : -1)));
+    patchPostState(user.id, post.id, { saved: next });
+    await enqueue(next ? "save" : "unsave", `save:${user.id}:${post.id}`, { user_id: user.id, post_id: post.id });
   };
 
   const handleRepost = async () => {
     if (!user) { setLoginPrompt("repost"); return; }
-    if (!navigator.onLine) {
-      const next = !reposted;
-      setReposted(next);
-      setRepostsCount((c) => Math.max(0, c + (next ? 1 : -1)));
-      await enqueue(next ? "repost" : "unrepost", `repost:${user.id}:${post.id}`, { user_id: user.id, post_id: post.id });
-      return;
-    }
-    if (reposted) {
-      await supabase.from("reposts").delete().eq("user_id", user.id).eq("post_id", post.id);
-      setReposted(false);
-      setRepostsCount((c) => Math.max(0, c - 1));
-    } else {
-      // Check if already reposted (prevent duplicate)
-      const { data: existing } = await supabase.from("reposts").select("id").eq("user_id", user.id).eq("post_id", post.id).maybeSingle();
-      if (existing) return;
-      await supabase.from("reposts").insert({ user_id: user.id, post_id: post.id });
-      setReposted(true);
-      setRepostsCount((c) => c + 1);
-      toast({ title: "Reposted! 🔄" });
-    }
+    const next = !reposted;
+    setReposted(next);
+    setRepostsCount((c) => Math.max(0, c + (next ? 1 : -1)));
+    patchPostState(user.id, post.id, { reposted: next });
+    if (next) toast({ title: "Reposted! 🔄" });
+    await enqueue(next ? "repost" : "unrepost", `repost:${user.id}:${post.id}`, { user_id: user.id, post_id: post.id });
   };
 
   const handleDelete = async () => {

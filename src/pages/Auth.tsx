@@ -24,8 +24,14 @@ const Auth = () => {
 
     try {
       if (isLogin) {
+        // Progressive delay only after FAILED attempts; successful logins are never limited.
+        // (Server-side brute-force limits are enforced by the auth service itself.)
+        const fk = `auth-fail:${email.toLowerCase()}`;
+        const fails = Number(sessionStorage.getItem(fk) || 0);
+        if (fails >= 3) await new Promise((r) => setTimeout(r, Math.min(30000, 1000 * 2 ** (fails - 3))));
         const { error } = await supabase.auth.signInWithPassword({ email, password });
-        if (error) throw error;
+        if (error) { sessionStorage.setItem(fk, String(fails + 1)); throw error; }
+        sessionStorage.removeItem(fk);
         navigate("/");
       } else {
         const { error } = await supabase.auth.signUp({
