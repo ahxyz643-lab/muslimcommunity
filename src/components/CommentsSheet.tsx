@@ -84,6 +84,15 @@ const CommentsSheet = ({ postId, reelId, type = "post", onClose, onCountChange }
       c.replies = replyMap.get(c.id) || [];
     });
 
+    // keep comments still waiting in the local queue visible
+    const queued = (await queueAll()).filter((q) => (q.type === "comment" || q.type === "reel_comment") && (q.payload?.post_id === targetId || q.payload?.reel_id === targetId));
+    const known = new Set(allComments.map((c) => c.id));
+    for (const q of queued) {
+      if (known.has(q.payload.id)) continue;
+      const c: Comment = { id: q.payload.id, content: q.payload.content, user_id: q.payload.user_id, created_at: new Date(q.createdAt).toISOString(), parent_id: q.payload.parent_id ?? null, replies: [] };
+      const parent = c.parent_id && topLevel.find((t) => t.id === c.parent_id);
+      if (parent) parent.replies = [...(parent.replies || []), c]; else topLevel.push(c);
+    }
     setComments(topLevel);
     void cacheSet(cacheKey, topLevel);
     setLoading(false);
@@ -98,9 +107,9 @@ const CommentsSheet = ({ postId, reelId, type = "post", onClose, onCountChange }
     if (!newComment.trim() || !targetId) return;
     setSending(true);
     const content = newComment.trim();
-    if (!navigator.onLine) {
+    {
       const id = crypto.randomUUID();
-      const optimistic: Comment = { id, content, user_id: user.id, created_at: new Date().toISOString(), parent_id: supportsReplies ? replyTo?.id ?? null : null, replies: [] };
+      const optimistic: Comment = { id, content, user_id: user.id, created_at: new Date().toISOString(), parent_id: supportsReplies ? replyTo?.id ?? null : null, replies: [], profile: (user.user_metadata ? { user_id: user.id, display_name: user.user_metadata.display_name || user.user_metadata.full_name || "You", username: user.user_metadata.username || "", avatar_url: user.user_metadata.avatar_url || null, verified: false } : undefined) as any };
       if (optimistic.parent_id) {
         setComments((prev) => prev.map((c) => (c.id === optimistic.parent_id ? { ...c, replies: [...(c.replies || []), optimistic] } : c)));
       } else {
@@ -116,25 +125,7 @@ const CommentsSheet = ({ postId, reelId, type = "post", onClose, onCountChange }
       setNewComment("");
       setReplyTo(null);
       onCountChange?.(1);
-      setSending(false);
-      toast({ title: "Saved offline", description: "Your comment will post when you're back online." });
-      return;
-    }
-    const payload: any = {
-      [fkColumn]: targetId,
-      user_id: user.id,
-      content,
-    };
-    if (supportsReplies) payload.parent_id = replyTo?.id ?? null;
-    const { error } = await supabase.from(tableName as any).insert(payload);
-    if (error) {
-      console.error("Comment insert failed:", error);
-      toast({ title: "Couldn't post comment", description: getUserFriendlyError(error), variant: "destructive" });
-    } else {
-      setNewComment("");
-      setReplyTo(null);
-      onCountChange?.(1);
-      fetchComments();
+      if (!navigator.onLine) toast({ title: "Saved offline", description: "Your comment will post when you're back online." });
     }
     setSending(false);
   };
