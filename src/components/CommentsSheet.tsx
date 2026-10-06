@@ -6,8 +6,8 @@ import { useToast } from "@/hooks/use-toast";
 import { formatDistanceToNow } from "date-fns";
 import { useNavigate } from "react-router-dom";
 import { getUserFriendlyError } from "@/lib/errors";
-import { enqueue } from "@/lib/offline/queue";
-import { cacheGet, cacheSet } from "@/lib/offline/db";
+import { enqueue, cancelQueuedComment } from "@/lib/offline/queue";
+import { cacheGet, cacheSet, queueAll } from "@/lib/offline/db";
 
 interface Comment {
   id: string;
@@ -131,7 +131,7 @@ const CommentsSheet = ({ postId, reelId, type = "post", onClose, onCountChange }
   };
 
   const handleDelete = async (id: string) => {
-    await supabase.from(tableName as any).delete().eq("id", id);
+    if (!(await cancelQueuedComment(id))) await supabase.from(tableName as any).delete().eq("id", id);
     onCountChange?.(-1);
     fetchComments();
   };
