@@ -167,10 +167,10 @@ async function run(id: string) {
 }
 
 const tags = (d: Draft) =>
-  Array.from(new Set(`${d.hashtags} ${d.caption}`.match(/#?[\p{L}\p{N}_]+/gu)?.filter((t, _i, _a) => true) || []))
-    .filter((t) => d.hashtags.includes(t) || t.startsWith("#"))
-    .map((t) => t.replace(/^#/, "").toLowerCase())
-    .slice(0, 15);
+  Array.from(new Set([
+    ...d.hashtags.split(/[\s,]+/),
+    ...(d.caption.match(/#[\p{L}\p{N}_]+/gu) || []),
+  ].map((t) => t.replace(/^#/, "").toLowerCase()).filter(Boolean))).slice(0, 15);
 
 function body(d: Draft) {
   const parts = [d.caption.trim()];
