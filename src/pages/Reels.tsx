@@ -703,7 +703,7 @@ const Reels = () => {
           <ArrowLeft className="h-6 w-6" />
         </button>
         <h1 className="text-base font-bold text-white">Reels</h1>
-        <button onClick={() => navigate("/reels/create")} aria-label="Create reel" className="min-h-11 min-w-11 text-white">
+        <button onClick={() => navigate("/create?mode=reel")} aria-label="Create reel" className="min-h-11 min-w-11 text-white">
           <Plus className="h-6 w-6" />
         </button>
       </div>
@@ -730,7 +730,7 @@ const Reels = () => {
           <p className="text-sm text-white/70">{online ? "Be the first to create a reel!" : "Connect to the internet to load reels."}</p>
           {online && (
             <button
-              onClick={() => navigate("/reels/create")}
+              onClick={() => navigate("/create?mode=reel")}
               className="mt-2 rounded-full bg-primary px-6 py-2.5 text-sm font-semibold text-primary-foreground shadow-glow"
             >
               Create Reel

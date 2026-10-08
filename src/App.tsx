@@ -24,14 +24,14 @@ import Jobs from "@/pages/Jobs";
 import NotFound from "@/pages/NotFound";
 
 // Lazy heavier routes to shrink initial bundle
-const CreatePost = lazy(() => import("@/pages/CreatePost"));
+const UploadWizard = lazy(() => import("@/components/upload/UploadWizard"));
+import UploadStatus from "@/components/upload/UploadStatus";
 const PrivacySettings = lazy(() => import("@/pages/PrivacySettings"));
 const NotificationSettings = lazy(() => import("@/pages/NotificationSettings"));
 const HelpSupport = lazy(() => import("@/pages/HelpSupport"));
 const CreatorStudio = lazy(() => import("@/pages/CreatorStudio"));
 const Employer = lazy(() => import("@/pages/Employer"));
 const Reels = lazy(() => import("@/pages/Reels"));
-const CreateReel = lazy(() => import("@/pages/CreateReel"));
 const Donations = lazy(() => import("@/pages/Donations"));
 const TikTokFeed = lazy(() => import("@/pages/TikTokFeed"));
 const AdminLayout = lazy(() => import("@/components/admin/AdminLayout"));
@@ -84,7 +84,7 @@ const AppRoutes = () => {
         <Route path="/auth" element={user ? <Navigate to="/" replace /> : <Auth />} />
         <Route path="/" element={<Home />} />
         <Route path="/explore" element={<Explore />} />
-        <Route path="/create" element={<ProtectedRoute><CreatePost /></ProtectedRoute>} />
+        <Route path="/create" element={<ProtectedRoute><UploadWizard /></ProtectedRoute>} />
         <Route path="/messages" element={<ProtectedRoute><Messages /></ProtectedRoute>} />
         <Route path="/profile" element={<ProtectedRoute><Profile /></ProtectedRoute>} />
         <Route path="/user/:userId" element={<UserProfilePage />} />
@@ -118,7 +118,7 @@ const AppRoutes = () => {
           <Route path="ai" element={<AdminAI />} />
         </Route>
         <Route path="/reels" element={<Reels />} />
-        <Route path="/reels/create" element={<ProtectedRoute><CreateReel /></ProtectedRoute>} />
+        <Route path="/reels/create" element={<Navigate to="/create?mode=reel" replace />} />
         <Route path="/jobs" element={<Jobs />} />
         <Route path="/donations" element={<Donations />} />
         <Route path="/tiktok" element={<TikTokFeed />} />
@@ -128,6 +128,7 @@ const AppRoutes = () => {
       </ErrorBoundary>
       {!onAdmin && <BottomNav />}
       <OfflineIndicator />
+      <UploadStatus />
     </div>
   );
 };

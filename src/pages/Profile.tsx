@@ -160,7 +160,7 @@ const Profile = () => {
           userReels.length === 0 ? (
             <div className="py-12 text-center">
               <p className="text-sm text-muted-foreground">No reels yet</p>
-              <button onClick={() => navigate("/reels/create")} className="mt-3 rounded-full bg-primary px-5 py-2 text-xs font-semibold text-primary-foreground shadow-glow">
+              <button onClick={() => navigate("/create?mode=reel")} className="mt-3 rounded-full bg-primary px-5 py-2 text-xs font-semibold text-primary-foreground shadow-glow">
                 Create your first reel
               </button>
             </div>
