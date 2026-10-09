@@ -6,7 +6,7 @@ import GuestHero from "@/components/GuestHero";
 import JobInlineCard from "@/components/JobInlineCard";
 import DonationInlineCard from "@/components/DonationInlineCard";
 import { supabase } from "@/integrations/supabase/client";
-import { fetchPostsWithProfiles } from "@/lib/posts";
+import { fetchPostsWithProfiles, getProfiles } from "@/lib/posts";
 import { useAuth } from "@/contexts/AuthContext";
 import { Loader2 } from "lucide-react";
 import { useSeo } from "@/hooks/useSeo";
@@ -14,6 +14,7 @@ import { cacheGet, cacheSet } from "@/lib/offline/db";
 import { useOffline } from "@/hooks/useOffline";
 
 const PAGE_SIZE = 15;
+const FEED_TTL = 5 * 60 * 1000;
 const shuffle = <T,>(a: T[]) => { const b = [...a]; for (let i = b.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [b[i], b[j]] = [b[j], b[i]]; } return b; };
 
 const Home = () => {
@@ -39,8 +40,7 @@ const Home = () => {
       const rows = (data || []).filter((r: any) => r.kind === "post");
       const userIds = [...new Set(rows.map((p: any) => p.user_id))] as string[];
       if (userIds.length === 0) return [];
-      const { data: profiles } = await supabase.from("profiles").select("user_id, username, display_name, avatar_url, verified").in("user_id", userIds);
-      const map = new Map(profiles?.map((p) => [p.user_id, p]) || []);
+      const map = await getProfiles(userIds);
       return shuffle(rows).map((p: any) => ({ ...p, language: null, updated_at: p.created_at, profiles: map.get(p.user_id) || null }));
     }
     return shuffle(await fetchPostsWithProfiles(
@@ -48,8 +48,18 @@ const Home = () => {
     ));
   }, [user?.id]);
 
-  const loadPosts = useCallback(async () => {
-    // 1) paint instantly from cache, 2) refresh from network when possible
+  const loadPosts = useCallback(async (force = false) => {
+    // Fresh cache (<5 min) → zero database calls on refresh/navigation.
+    if (!force) {
+      const fresh = await cacheGet<PostWithProfile[]>(cacheKey, FEED_TTL);
+      if (fresh?.length) {
+        setPosts(shuffle(fresh));
+        offsetRef.current = fresh.length;
+        setHasMore(true);
+        setLoading(false);
+        return;
+      }
+    }
     const cached = await cacheGet<PostWithProfile[]>(cacheKey);
     if (cached?.length) {
       setPosts((prev) => (prev.length ? prev : shuffle(cached)));
@@ -95,17 +105,30 @@ const Home = () => {
     setHasMore(true);
     offsetRef.current = 0;
     loadPosts();
-    if (typeof navigator !== "undefined" && !navigator.onLine) return;
+    if (!user || (typeof navigator !== "undefined" && !navigator.onLine)) return;
+    // Only react to the current user's own new posts (not every post app-wide).
     const channel = supabase
-      .channel("posts-feed")
-      .on("postgres_changes", { event: "*", schema: "public", table: "posts" }, () => {
-        // debounce bursty realtime events so the feed doesn't refetch per row
+      .channel(`posts-feed-${user.id}`)
+      .on("postgres_changes", { event: "INSERT", schema: "public", table: "posts", filter: `user_id=eq.${user.id}` }, () => {
         window.clearTimeout(refreshTimer.current);
-        refreshTimer.current = window.setTimeout(() => { void loadPosts(); }, 1500);
+        refreshTimer.current = window.setTimeout(() => { void loadPosts(true); }, 1500);
       })
       .subscribe();
     return () => { window.clearTimeout(refreshTimer.current); supabase.removeChannel(channel); };
   }, [user?.id, online]);
+
+  // Pull-to-refresh: force a fresh fetch when user pulls down at the top.
+  useEffect(() => {
+    let startY = 0, pulling = false;
+    const onStart = (e: TouchEvent) => { pulling = window.scrollY <= 0; startY = e.touches[0].clientY; };
+    const onEnd = (e: TouchEvent) => {
+      if (pulling && e.changedTouches[0].clientY - startY > 90) { offsetRef.current = 0; void loadPosts(true); }
+      pulling = false;
+    };
+    window.addEventListener("touchstart", onStart, { passive: true });
+    window.addEventListener("touchend", onEnd, { passive: true });
+    return () => { window.removeEventListener("touchstart", onStart); window.removeEventListener("touchend", onEnd); };
+  }, [loadPosts]);
 
   useEffect(() => {
     const el = sentinelRef.current;
