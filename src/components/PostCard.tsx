@@ -13,6 +13,7 @@ import LoginPromptDialog from "@/components/LoginPromptDialog";
 import HiringInlineCard from "@/components/HiringInlineCard";
 import { enqueue } from "@/lib/offline/queue";
 import { getPostState, patchPostState } from "@/lib/postState";
+import { patchProfileList } from "@/lib/profileLists";
 import { cacheGet, cacheSet } from "@/lib/offline/db";
 import { isMediaCached, saveForOffline } from "@/lib/offline/media";
 import { Download, WifiOff, CheckCircle2 } from "lucide-react";
@@ -107,6 +108,7 @@ const PostCardBase = ({ post, onDelete }: { post: PostWithProfile; onDelete?: (i
     setLiked(next);
     setLikesCount((c) => Math.max(0, c + (next ? 1 : -1)));
     patchPostState(user.id, post.id, { liked: next });
+    patchProfileList("liked", user.id, post, next);
     await enqueue(next ? "like" : "unlike", `like:${user.id}:${post.id}`, { user_id: user.id, post_id: post.id });
   };
 
@@ -116,6 +118,7 @@ const PostCardBase = ({ post, onDelete }: { post: PostWithProfile; onDelete?: (i
     setSaved(next);
     setSavesCount((c) => Math.max(0, c + (next ? 1 : -1)));
     patchPostState(user.id, post.id, { saved: next });
+    patchProfileList("saved", user.id, post, next);
     await enqueue(next ? "save" : "unsave", `save:${user.id}:${post.id}`, { user_id: user.id, post_id: post.id });
   };
 
