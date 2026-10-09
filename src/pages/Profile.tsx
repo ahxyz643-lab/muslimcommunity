@@ -2,7 +2,33 @@ import { Settings as SettingsIcon, Grid3X3, Bookmark, Heart, BarChart3, Loader2,
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { cacheGet, cacheSet } from "@/lib/offline/db";
+import { bindProfileLists, profileListCacheKey, profileListKey, type ProfileListKind } from "@/lib/profileLists";
+
+const LIST_TTL = 10 * 60 * 1000;
+
+/** Device cache first; DB only when cache is missing/older than 10 min (or offline-safe fallback). */
+async function loadList(kind: ProfileListKind, userId: string) {
+  const ck = profileListCacheKey(kind, userId);
+  const fresh = await cacheGet<any[]>(ck, LIST_TTL);
+  if (fresh) return fresh;
+  const stale = await cacheGet<any[]>(ck);
+  if (typeof navigator !== "undefined" && !navigator.onLine && stale) return stale;
+  try {
+    const table = kind === "liked" ? "likes" : "saves";
+    const { data: rows, error } = await supabase.from(table).select("post_id").eq("user_id", userId);
+    if (error) throw error;
+    const posts = rows && rows.length
+      ? await fetchPostsWithProfiles(supabase.from("posts").select("*").in("id", rows.map((r) => r.post_id)).order("created_at", { ascending: false }))
+      : [];
+    await cacheSet(ck, posts);
+    return posts;
+  } catch (e) {
+    if (stale) return stale;
+    throw e;
+  }
+}
 import { supabase } from "@/integrations/supabase/client";
 import { fetchPostsWithProfiles } from "@/lib/posts";
 import PostCard from "@/components/PostCard";
@@ -34,28 +60,21 @@ const Profile = () => {
     enabled: !!user,
   });
 
+  const queryClient = useQueryClient();
+  bindProfileLists(queryClient);
+
   const { data: savedPosts = [] } = useQuery({
-    queryKey: ["saved-posts", user?.id],
-    queryFn: async () => {
-      const { data: saves } = await supabase.from("saves").select("post_id").eq("user_id", user!.id);
-      if (!saves || saves.length === 0) return [];
-      return fetchPostsWithProfiles(
-        supabase.from("posts").select("*").in("id", saves.map((s) => s.post_id)).order("created_at", { ascending: false })
-      );
-    },
+    queryKey: profileListKey("saved", user?.id || ""),
+    queryFn: () => loadList("saved", user!.id),
     enabled: !!user && activeTab === "saved",
+    staleTime: LIST_TTL,
   });
 
   const { data: likedPosts = [] } = useQuery({
-    queryKey: ["liked-posts", user?.id],
-    queryFn: async () => {
-      const { data: likes } = await supabase.from("likes").select("post_id").eq("user_id", user!.id);
-      if (!likes || likes.length === 0) return [];
-      return fetchPostsWithProfiles(
-        supabase.from("posts").select("*").in("id", likes.map((l) => l.post_id)).order("created_at", { ascending: false })
-      );
-    },
+    queryKey: profileListKey("liked", user?.id || ""),
+    queryFn: () => loadList("liked", user!.id),
     enabled: !!user && activeTab === "liked",
+    staleTime: LIST_TTL,
   });
 
   const { data: followersCount = 0 } = useQuery({
