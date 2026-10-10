@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { useAuth } from "@/contexts/AuthContext";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { lovable } from "@/integrations/lovable/index";
@@ -17,6 +18,11 @@ const Auth = () => {
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
   const { toast } = useToast();
+  const { user } = useAuth();
+
+  useEffect(() => {
+    if (user) navigate("/", { replace: true });
+  }, [user, navigate]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -24,15 +30,10 @@ const Auth = () => {
 
     try {
       if (isLogin) {
-        // Progressive delay only after FAILED attempts; successful logins are never limited.
-        // (Server-side brute-force limits are enforced by the auth service itself.)
-        const fk = `auth-fail:${email.toLowerCase()}`;
-        const fails = Number(sessionStorage.getItem(fk) || 0);
-        if (fails >= 3) await new Promise((r) => setTimeout(r, Math.min(30000, 1000 * 2 ** (fails - 3))));
-        const { error } = await supabase.auth.signInWithPassword({ email, password });
-        if (error) { sessionStorage.setItem(fk, String(fails + 1)); throw error; }
-        sessionStorage.removeItem(fk);
-        navigate("/");
+        // Brute-force limits are enforced server-side by the auth service.
+        const { error } = await supabase.auth.signInWithPassword({ email: email.trim(), password });
+        if (error) throw error;
+        navigate("/", { replace: true });
       } else {
         const { error } = await supabase.auth.signUp({
           email,
@@ -61,12 +62,18 @@ const Auth = () => {
   };
 
   const handleGoogleSignIn = async () => {
-    const { error } = await lovable.auth.signInWithOAuth("google", {
+    setLoading(true);
+    const result = await lovable.auth.signInWithOAuth("google", {
       redirect_uri: window.location.origin,
+      extraParams: { prompt: "select_account" },
     });
-    if (error) {
-      toast({ title: "Error", description: error.message, variant: "destructive" });
+    if (result.error) {
+      setLoading(false);
+      toast({ title: "Error", description: result.error.message, variant: "destructive" });
+      return;
     }
+    if (result.redirected) return;
+    navigate("/", { replace: true });
   };
 
   const handleAppleSignIn = async () => {
