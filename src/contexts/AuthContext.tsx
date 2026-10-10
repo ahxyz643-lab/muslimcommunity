@@ -24,21 +24,43 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      (_event, session) => {
-        setSession(session);
-        setUser(session?.user ?? null);
-        setLoading(false);
-      }
-    );
-
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session);
-      setUser(session?.user ?? null);
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, s) => {
+      setSession(s);
+      setUser(s?.user ?? null);
       setLoading(false);
     });
 
-    return () => subscription.unsubscribe();
+    supabase.auth.getSession().then(({ data: { session: s } }) => {
+      setSession(s);
+      setUser(s?.user ?? null);
+      setLoading(false);
+    });
+
+    // Keep the session alive: when the app comes back to the foreground or the
+    // network returns, resume auto-refresh and renew the token if it's near expiry.
+    const revive = async () => {
+      if (document.visibilityState !== "visible" || !navigator.onLine) return;
+      supabase.auth.startAutoRefresh();
+      const { data: { session: s } } = await supabase.auth.getSession();
+      if (s?.expires_at && s.expires_at * 1000 - Date.now() < 5 * 60 * 1000) {
+        await supabase.auth.refreshSession().catch(() => {});
+      }
+    };
+    const onHide = () => {
+      if (document.visibilityState === "hidden") supabase.auth.stopAutoRefresh();
+    };
+    document.addEventListener("visibilitychange", revive);
+    document.addEventListener("visibilitychange", onHide);
+    window.addEventListener("online", revive);
+    window.addEventListener("focus", revive);
+
+    return () => {
+      subscription.unsubscribe();
+      document.removeEventListener("visibilitychange", revive);
+      document.removeEventListener("visibilitychange", onHide);
+      window.removeEventListener("online", revive);
+      window.removeEventListener("focus", revive);
+    };
   }, []);
 
   const signOut = async () => {
