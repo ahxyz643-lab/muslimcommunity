@@ -41,6 +41,7 @@ const Profile = () => {
   const { user } = useAuth();
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState("posts");
+  const [openPost, setOpenPost] = useState<any>(null);
   const [followList, setFollowList] = useState<null | "followers" | "following">(null);
 
   const { data: profile, isLoading: profileLoading } = useQuery({
@@ -166,12 +167,22 @@ const Profile = () => {
         </div>
       </div>
 
-      <div className="mt-6 flex border-b border-border">
-        {tabs.map(({ id, icon: Icon, label }) => (
-          <button key={id} onClick={() => id === "studio" ? navigate("/creator-studio") : setActiveTab(id)} className={`flex flex-1 items-center justify-center gap-1.5 py-3 text-xs font-medium transition-colors ${activeTab === id ? "border-b-2 border-primary text-primary" : "text-muted-foreground hover:text-foreground"}`}>
-            <Icon className="h-4 w-4" />{label}
-          </button>
-        ))}
+      <div className="sticky top-0 z-20 mt-6 border-b border-border bg-background/90 px-2 py-2 backdrop-blur">
+        <div className="relative flex rounded-full bg-card p-1">
+          <span
+            aria-hidden
+            className="absolute bottom-1 left-1 top-1 rounded-full bg-secondary ring-1 ring-primary/40 transition-transform duration-300 ease-out"
+            style={{
+              width: `calc((100% - 0.5rem) / ${tabs.length})`,
+              transform: `translateX(${Math.max(0, tabs.findIndex((t) => t.id === activeTab)) * 100}%)`,
+            }}
+          />
+          {tabs.map(({ id, icon: Icon, label }) => (
+            <button key={id} onClick={() => id === "studio" ? navigate("/creator-studio") : setActiveTab(id)} className={`relative z-10 flex flex-1 flex-col items-center justify-center gap-0.5 rounded-full py-1.5 text-[10px] font-medium transition-colors ${activeTab === id ? "text-primary" : "text-muted-foreground hover:text-foreground"}`}>
+              <Icon className="h-4 w-4" />{label}
+            </button>
+          ))}
+        </div>
       </div>
 
       <div>
@@ -216,10 +227,38 @@ const Profile = () => {
           activePosts.length === 0 ? (
             <div className="py-12 text-center"><p className="text-sm text-muted-foreground">No {activeTab} posts</p></div>
           ) : (
-            <div className="divide-y divide-border">{activePosts.map((p) => <PostCard key={p.id} post={p} />)}</div>
+            <div className="grid grid-cols-3 gap-0.5 p-0.5">
+              {activePosts.map((p: any) => {
+                const isVideo = !!(p.video_url || p.telegram_file_id);
+                return (
+                  <button key={p.id} onClick={() => setOpenPost(p)} className="relative aspect-square overflow-hidden bg-secondary">
+                    {p.image_url ? (
+                      <img src={p.image_url} alt="" loading="lazy" className="h-full w-full object-cover" />
+                    ) : isVideo ? (
+                      <video src={getVideoSrc(p)} muted playsInline preload="metadata" className="h-full w-full object-cover" />
+                    ) : (
+                      <div className="flex h-full w-full items-center justify-center p-2 text-[11px] leading-snug text-foreground line-clamp-5">{p.content}</div>
+                    )}
+                    {isVideo && (
+                      <div className="absolute right-1 top-1 rounded-full bg-background/60 p-1 backdrop-blur-sm">
+                        <Play className="h-3 w-3 fill-foreground text-foreground" />
+                      </div>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
           )
         )}
       </div>
+      {openPost && (
+        <div className="fixed inset-0 z-50 overflow-y-auto bg-background/95 backdrop-blur" onClick={() => setOpenPost(null)}>
+          <div className="mx-auto max-w-lg pt-12" onClick={(e) => e.stopPropagation()}>
+            <button onClick={() => setOpenPost(null)} className="fixed left-3 top-3 z-10 rounded-full bg-card p-2 text-foreground">✕</button>
+            <PostCard post={openPost} />
+          </div>
+        </div>
+      )}
       {followList && user && (
         <FollowListSheet userId={user.id} mode={followList} onClose={() => setFollowList(null)} />
       )}
