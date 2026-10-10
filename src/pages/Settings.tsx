@@ -12,13 +12,20 @@ const Settings = () => {
   const { theme, setTheme } = useTheme();
   const { hasAccess } = useAdminRole();
 
+  const cacheKey = `settings-profile:${user?.id}`;
+  const cached = (() => {
+    try { return user ? JSON.parse(localStorage.getItem(cacheKey) || "null") : null; } catch { return null; }
+  })();
   const { data: profile } = useQuery({
     queryKey: ["profile", user?.id],
     queryFn: async () => {
       const { data } = await supabase.from("profiles").select("*").eq("user_id", user!.id).single();
+      if (data) localStorage.setItem(cacheKey, JSON.stringify(data));
       return data;
     },
-    enabled: !!user,
+    enabled: !!user && navigator.onLine,
+    initialData: cached ?? undefined,
+    staleTime: 10 * 60 * 1000,
   });
 
   const themeOptions: { value: "dark" | "light" | "system"; icon: typeof Moon; label: string }[] = [
@@ -91,15 +98,21 @@ const Settings = () => {
         {/* Theme Switcher */}
         <div className="mb-6">
           <h2 className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">Appearance</h2>
-          <div className="flex gap-2 rounded-xl border border-border bg-card p-2">
+          <div className="relative flex rounded-xl border border-border bg-card p-1">
+            <span
+              aria-hidden
+              className="absolute top-1 bottom-1 left-1 rounded-lg bg-secondary ring-1 ring-primary/40 transition-transform duration-300 ease-out"
+              style={{
+                width: "calc((100% - 0.5rem) / 3)",
+                transform: `translateX(${themeOptions.findIndex((o) => o.value === theme) * 100}%)`,
+              }}
+            />
             {themeOptions.map(({ value, icon: Icon, label }) => (
               <button
                 key={value}
                 onClick={() => setTheme(value)}
-                className={`flex flex-1 flex-col items-center gap-1.5 rounded-lg py-3 text-xs font-medium transition-all ${
-                  theme === value
-                    ? "bg-primary text-primary-foreground shadow-glow"
-                    : "text-muted-foreground hover:text-foreground hover:bg-secondary"
+                className={`relative z-10 flex flex-1 flex-col items-center gap-1 rounded-lg py-2.5 text-xs font-medium transition-colors ${
+                  theme === value ? "text-primary" : "text-muted-foreground hover:text-foreground"
                 }`}
               >
                 <Icon className="h-5 w-5" />
