@@ -1,20 +1,55 @@
 import { useState, useEffect, useRef, useCallback } from "react";
-import { Search, Edit, ArrowLeft, Send, Loader2, Check, CheckCheck, ImagePlus, X, Mic, Square, Trash2, Phone, PhoneOff, Video } from "lucide-react";
+import {
+  Search,
+  Plus,
+  ArrowLeft,
+  Send,
+  Loader2,
+  Check,
+  CheckCheck,
+  ImagePlus,
+  X,
+  Mic,
+  Square,
+  Trash2,
+  Phone,
+  PhoneOff,
+  Video,
+  Sparkles,
+} from "lucide-react";
+import { useSearchParams, useNavigate } from "react-router-dom";
 import CallScreen from "@/components/CallScreen";
 import { useAuth } from "@/contexts/AuthContext";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { supabase } from "@/integrations/supabase/client";
 import { formatDistanceToNow } from "date-fns";
+import {
+  collection,
+  query,
+  where,
+  orderBy,
+  onSnapshot,
+  getDocs,
+  getDoc,
+  setDoc,
+  addDoc,
+  doc,
+  updateDoc,
+  deleteDoc,
+  limit,
+} from "firebase/firestore";
+import { db, handleFirestoreError, OperationType } from "@/lib/firebase";
+
+interface OtherUserProfile {
+  user_id: string;
+  display_name: string | null;
+  username: string | null;
+  avatar_url: string | null;
+  last_seen?: string | null;
+}
 
 interface Conversation {
   id: string;
-  otherUser: {
-    user_id: string;
-    display_name: string | null;
-    username: string | null;
-    avatar_url: string | null;
-    last_seen?: string | null;
-  };
+  participant_ids: string[];
+  otherUser: OtherUserProfile;
   lastMessage?: string;
   lastMessageAt?: string;
   unread: number;
@@ -33,306 +68,341 @@ interface Message {
 
 const isOnline = (lastSeen: string | null | undefined) => {
   if (!lastSeen) return false;
-  return Date.now() - new Date(lastSeen).getTime() < 2 * 60 * 1000;
+  return Date.now() - new Date(lastSeen).getTime() < 5 * 60 * 1000;
 };
 
 const OnlineDot = ({ lastSeen, size = "sm" }: { lastSeen?: string | null; size?: "sm" | "md" }) => {
   const online = isOnline(lastSeen);
   const px = size === "md" ? "h-3.5 w-3.5 border-2" : "h-2.5 w-2.5 border-[1.5px]";
   return (
-    <span className={`absolute bottom-0 right-0 ${px} rounded-full border-background ${online ? "bg-green-500" : "bg-muted-foreground/40"}`} />
+    <span
+      className={`absolute bottom-0 right-0 ${px} rounded-full border-background ${
+        online ? "bg-green-500 shadow-sm" : "bg-muted-foreground/30"
+      }`}
+    />
   );
 };
 
-const VoicePlayer = ({ url }: { url: string }) => {
-  const audioRef = useRef<HTMLAudioElement>(null);
-  const [playing, setPlaying] = useState(false);
-  const [progress, setProgress] = useState(0);
-  const [duration, setDuration] = useState(0);
-
-  const toggle = () => {
-    if (!audioRef.current) return;
-    if (playing) {
-      audioRef.current.pause();
-    } else {
-      audioRef.current.play();
-    }
-    setPlaying(!playing);
-  };
-
-  return (
-    <div className="flex items-center gap-2 min-w-[180px]">
-      <audio
-        ref={audioRef}
-        src={url}
-        onTimeUpdate={() => {
-          if (audioRef.current) setProgress((audioRef.current.currentTime / (audioRef.current.duration || 1)) * 100);
-        }}
-        onLoadedMetadata={() => {
-          if (audioRef.current) setDuration(audioRef.current.duration);
-        }}
-        onEnded={() => { setPlaying(false); setProgress(0); }}
-      />
-      <button onClick={toggle} className="shrink-0">
-        {playing ? (
-          <Square className="h-4 w-4 fill-current" />
-        ) : (
-          <svg viewBox="0 0 24 24" className="h-4 w-4 fill-current"><polygon points="5,3 19,12 5,21" /></svg>
-        )}
-      </button>
-      <div className="flex-1 h-1.5 bg-current/20 rounded-full overflow-hidden">
-        <div className="h-full bg-current rounded-full transition-all" style={{ width: `${progress}%` }} />
-      </div>
-      <span className="text-[10px] opacity-70 tabular-nums">
-        {duration > 0 ? `${Math.floor(duration / 60)}:${String(Math.floor(duration % 60)).padStart(2, "0")}` : "0:00"}
-      </span>
-    </div>
-  );
-};
-
-const Messages = () => {
+export const Messages = () => {
   const { user } = useAuth();
-  const queryClient = useQueryClient();
+  const [searchParams] = useSearchParams();
+  const navigate = useNavigate();
+
+  const [conversations, setConversations] = useState<Conversation[]>([]);
+  const [convosLoading, setConvosLoading] = useState(true);
   const [activeConvo, setActiveConvo] = useState<Conversation | null>(null);
+  const [messages, setMessages] = useState<Message[]>([]);
   const [newMessage, setNewMessage] = useState("");
-  const [showNewChat, setShowNewChat] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
+  const [showNewChatModal, setShowNewChatModal] = useState(false);
+  const [allCommunityUsers, setAllCommunityUsers] = useState<OtherUserProfile[]>([]);
   const [sending, setSending] = useState(false);
-  const [realtimeMessages, setRealtimeMessages] = useState<Message[]>([]);
+
+  // Attachment states
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [isRecording, setIsRecording] = useState(false);
   const [recordingTime, setRecordingTime] = useState(0);
   const [voiceBlob, setVoiceBlob] = useState<Blob | null>(null);
-  const [deletingId, setDeletingId] = useState<string | null>(null);
+
+  // Calling state
+  const [activeCall, setActiveCall] = useState<{ isVideo: boolean; isIncoming: boolean; callId?: string } | null>(null);
+  const [incomingCall, setIncomingCall] = useState<{
+    callId: string;
+    conversationId: string;
+    callerId: string;
+    callerName: string;
+    callerAvatar?: string;
+    isVideo: boolean;
+  } | null>(null);
+
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  // Calling state
-  const [activeCall, setActiveCall] = useState<{ isVideo: boolean; isIncoming: boolean } | null>(null);
-  const [incomingCall, setIncomingCall] = useState<{ conversationId: string; callerId: string; isVideo: boolean } | null>(null);
-
-  // Update last_seen periodically
+  // 1. Fetch conversations in real-time from Firestore
   useEffect(() => {
-    if (!user) return;
-    const update = () => supabase.from("profiles").update({ last_seen: new Date().toISOString() }).eq("user_id", user.id).then();
-    update();
-    const interval = setInterval(update, 60_000);
-    return () => clearInterval(interval);
-  }, [user?.id]);
-
-  // Fetch conversations
-  const { data: conversations = [], isLoading: convosLoading } = useQuery({
-    queryKey: ["conversations", user?.id],
-    queryFn: async () => {
-      const { data: participants } = await supabase
-        .from("conversation_participants")
-        .select("conversation_id")
-        .eq("user_id", user!.id);
-
-      if (!participants || participants.length === 0) return [];
-
-      const convoIds = participants.map((p) => p.conversation_id);
-
-      const { data: allParticipants } = await supabase
-        .from("conversation_participants")
-        .select("conversation_id, user_id")
-        .in("conversation_id", convoIds)
-        .neq("user_id", user!.id);
-
-      if (!allParticipants) return [];
-
-      const otherUserIds = [...new Set(allParticipants.map((p) => p.user_id))];
-      const { data: profiles } = await supabase
-        .from("profiles")
-        .select("user_id, display_name, username, avatar_url, last_seen")
-        .in("user_id", otherUserIds);
-
-      const profileMap = new Map(profiles?.map((p) => [p.user_id, p]) || []);
-
-      const convos: Conversation[] = [];
-      for (const p of allParticipants) {
-        const prof = profileMap.get(p.user_id);
-        if (!prof) continue;
-
-        const { data: msgs } = await supabase
-          .from("messages")
-          .select("content, created_at, image_url, voice_url")
-          .eq("conversation_id", p.conversation_id)
-          .order("created_at", { ascending: false })
-          .limit(1);
-
-        const lastMsg = msgs?.[0];
-        let lastMessage = lastMsg?.content;
-        if (lastMsg?.image_url) lastMessage = "📷 Photo";
-        if (lastMsg?.voice_url) lastMessage = "🎤 Voice note";
-
-        convos.push({
-          id: p.conversation_id,
-          otherUser: prof,
-          lastMessage,
-          lastMessageAt: lastMsg?.created_at,
-          unread: 0,
-        });
-      }
-
-      return convos.sort((a, b) => {
-        if (!a.lastMessageAt) return 1;
-        if (!b.lastMessageAt) return -1;
-        return new Date(b.lastMessageAt).getTime() - new Date(a.lastMessageAt).getTime();
-      });
-    },
-    enabled: !!user,
-  });
-
-  // Listen for incoming calls across all conversations
-  useEffect(() => {
-    if (!user || conversations.length === 0) return;
-    const channels: ReturnType<typeof supabase.channel>[] = [];
-
-    conversations.forEach((convo) => {
-      const ch = supabase
-        .channel(`call-${convo.id}`, { config: { broadcast: { self: false } } })
-        .on("broadcast", { event: "call-signal" }, ({ payload }) => {
-          if (payload.type === "ring" && payload.from !== user.id && !activeCall && !incomingCall) {
-            setIncomingCall({
-              conversationId: convo.id,
-              callerId: payload.from,
-              isVideo: payload.isVideo,
-            });
-          }
-        })
-        .subscribe();
-      channels.push(ch);
-    });
-
-    return () => {
-      channels.forEach((ch) => supabase.removeChannel(ch));
-    };
-  }, [user?.id, conversations, activeCall, incomingCall]);
-
-
-  const { data: fetchedMessages = [] } = useQuery({
-    queryKey: ["messages", activeConvo?.id],
-    queryFn: async () => {
-      const { data } = await supabase
-        .from("messages")
-        .select("*")
-        .eq("conversation_id", activeConvo!.id)
-        .order("created_at", { ascending: true });
-      return (data as Message[]) || [];
-    },
-    enabled: !!activeConvo,
-  });
-
-  // Sync fetched messages into realtime state
-  const fetchedMessagesJson = JSON.stringify(fetchedMessages);
-  useEffect(() => {
-    setRealtimeMessages(JSON.parse(fetchedMessagesJson));
-  }, [fetchedMessagesJson]);
-
-  // Real-time messages subscription
-  useEffect(() => {
-    if (!activeConvo) return;
-    const channel = supabase
-      .channel(`chat-${activeConvo.id}`)
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "messages", filter: `conversation_id=eq.${activeConvo.id}` },
-        (payload) => {
-          if (payload.eventType === "INSERT") {
-            const newMsg = payload.new as Message;
-            setRealtimeMessages((prev) => {
-              if (prev.some((m) => m.id === newMsg.id)) return prev;
-              return [...prev, newMsg];
-            });
-          } else if (payload.eventType === "UPDATE") {
-            const updated = payload.new as Message;
-            setRealtimeMessages((prev) =>
-              prev.map((m) => (m.id === updated.id ? updated : m))
-            );
-          } else if (payload.eventType === "DELETE") {
-            const deletedId = payload.old?.id;
-            if (deletedId) {
-              setRealtimeMessages((prev) => prev.filter((m) => m.id !== deletedId));
-            }
-          }
-        }
-      )
-      .subscribe();
-    return () => { supabase.removeChannel(channel); };
-  }, [activeConvo?.id]);
-
-  // Mark unread messages as read
-  useEffect(() => {
-    if (!activeConvo || !user || realtimeMessages.length === 0) return;
-    const unreadIds = realtimeMessages
-      .filter((m) => m.sender_id !== user.id && !m.read_at)
-      .map((m) => m.id);
-    if (unreadIds.length === 0) return;
-    supabase
-      .from("messages")
-      .update({ read_at: new Date().toISOString() })
-      .in("id", unreadIds)
-      .then();
-  }, [realtimeMessages, activeConvo?.id, user?.id]);
-
-  // Scroll to bottom
-  useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [realtimeMessages]);
-
-  // Fetch all users for new chat
-  const { data: allUsers = [] } = useQuery({
-    queryKey: ["all-users-chat"],
-    queryFn: async () => {
-      const { data } = await supabase
-        .from("profiles")
-        .select("user_id, display_name, username, avatar_url, last_seen")
-        .neq("user_id", user!.id)
-        .order("display_name", { ascending: true })
-        .limit(50);
-      return data || [];
-    },
-    enabled: !!user && showNewChat,
-  });
-
-  const searchResults = searchQuery.length > 0
-    ? allUsers.filter((p) =>
-        (p.username || "").toLowerCase().includes(searchQuery.toLowerCase()) ||
-        (p.display_name || "").toLowerCase().includes(searchQuery.toLowerCase())
-      )
-    : allUsers;
-
-  const startConversation = async (otherUserId: string) => {
-    if (!user) return;
-    const existing = conversations.find((c) => c.otherUser.user_id === otherUserId);
-    if (existing) {
-      setActiveConvo(existing);
-      setShowNewChat(false);
-      setSearchQuery("");
+    if (!user) {
+      setConversations([]);
+      setConvosLoading(false);
       return;
     }
-    const convoId = crypto.randomUUID();
-    const { error: convoErr } = await supabase.from("conversations").insert({ id: convoId });
-    if (convoErr) { console.error("Failed to create conversation:", convoErr); return; }
-    const { error: partErr } = await supabase.from("conversation_participants").insert([
-      { conversation_id: convoId, user_id: user.id },
-      { conversation_id: convoId, user_id: otherUserId },
-    ]);
-    if (partErr) { console.error("Failed to add participants:", partErr); return; }
-    const profile = searchResults.find((p) => p.user_id === otherUserId) || allUsers.find((p) => p.user_id === otherUserId);
-    setActiveConvo({
-      id: convoId,
-      otherUser: profile || { user_id: otherUserId, display_name: null, username: null, avatar_url: null },
-      unread: 0,
+
+    const convosCol = collection(db, "conversations");
+    const q = query(convosCol, where("participant_ids", "array-contains", user.id));
+
+    const unsubscribe = onSnapshot(
+      q,
+      async (snapshot) => {
+        const rawConvos = snapshot.docs.map((docSnap) => ({
+          id: docSnap.id,
+          ...docSnap.data(),
+        })) as any[];
+
+        // Extract other user IDs
+        const otherIds = new Set<string>();
+        rawConvos.forEach((c) => {
+          (c.participant_ids || []).forEach((pid: string) => {
+            if (pid !== user.id) otherIds.add(pid);
+          });
+        });
+
+        // Load profiles for these users
+        const profileMap = new Map<string, OtherUserProfile>();
+        for (const pid of otherIds) {
+          try {
+            const pDoc = await getDoc(doc(db, "profiles", pid));
+            if (pDoc.exists()) {
+              profileMap.set(pid, { user_id: pid, ...(pDoc.data() as any) });
+            } else {
+              profileMap.set(pid, {
+                user_id: pid,
+                display_name: "Community Member",
+                username: "member",
+                avatar_url: `https://api.dicebear.com/7.x/identicon/svg?seed=${pid}`,
+              });
+            }
+          } catch {
+            // fallback
+          }
+        }
+
+        const formatted: Conversation[] = rawConvos.map((c) => {
+          const otherId = (c.participant_ids || []).find((pid: string) => pid !== user.id) || "unknown";
+          const otherProf = profileMap.get(otherId) || {
+            user_id: otherId,
+            display_name: "Community Member",
+            username: "member",
+            avatar_url: `https://api.dicebear.com/7.x/identicon/svg?seed=${otherId}`,
+          };
+          return {
+            id: c.id,
+            participant_ids: c.participant_ids || [],
+            otherUser: otherProf,
+            lastMessage: c.last_message || "",
+            lastMessageAt: c.last_message_at || c.created_at || "",
+            unread: 0,
+          };
+        });
+
+        formatted.sort((a, b) => {
+          if (!a.lastMessageAt) return 1;
+          if (!b.lastMessageAt) return -1;
+          return new Date(b.lastMessageAt).getTime() - new Date(a.lastMessageAt).getTime();
+        });
+
+        setConversations(formatted);
+        setConvosLoading(false);
+      },
+      (error) => {
+        handleFirestoreError(error, OperationType.LIST, "conversations");
+        setConvosLoading(false);
+      }
+    );
+
+    return () => unsubscribe();
+  }, [user?.id]);
+
+  // 2. Fetch community members for quick chat / new chat
+  useEffect(() => {
+    if (!user) return;
+    const fetchUsers = async () => {
+      try {
+        const q = query(collection(db, "profiles"), limit(30));
+        const snap = await getDocs(q);
+        const users = snap.docs
+          .map((d) => ({ user_id: d.id, ...d.data() } as OtherUserProfile))
+          .filter((p) => p.user_id !== user.id);
+        setAllCommunityUsers(users);
+      } catch (err) {
+        console.warn("Could not load community members:", err);
+      }
+    };
+    fetchUsers();
+  }, [user?.id]);
+
+  // 3. Start or Open conversation with a user
+  const openChatWithUser = useCallback(
+    async (targetUserId: string) => {
+      if (!user || !targetUserId || targetUserId === user.id) return;
+
+      // 1. Check if conversation already exists in state
+      const existing = conversations.find((c) =>
+        c.participant_ids.includes(targetUserId)
+      );
+      if (existing) {
+        setActiveConvo(existing);
+        setShowNewChatModal(false);
+        return;
+      }
+
+      // 2. Load target user profile
+      let targetProfile: OtherUserProfile = {
+        user_id: targetUserId,
+        display_name: "Community Member",
+        username: "member",
+        avatar_url: `https://api.dicebear.com/7.x/identicon/svg?seed=${targetUserId}`,
+      };
+
+      try {
+        const pSnap = await getDoc(doc(db, "profiles", targetUserId));
+        if (pSnap.exists()) {
+          targetProfile = { user_id: targetUserId, ...(pSnap.data() as any) };
+        }
+      } catch (e) {
+        console.warn("Profile fetch fallback:", e);
+      }
+
+      // Generate deterministic conversation ID for 1-on-1 chats to prevent duplicates
+      const convoId = [user.id, targetUserId].sort().join("_");
+      const convoRef = doc(db, "conversations", convoId);
+
+      try {
+        await setDoc(
+          convoRef,
+          {
+            id: convoId,
+            participant_ids: [user.id, targetUserId],
+            created_at: new Date().toISOString(),
+          },
+          { merge: true }
+        );
+
+        const newConvoObj: Conversation = {
+          id: convoId,
+          participant_ids: [user.id, targetUserId],
+          otherUser: targetProfile,
+          lastMessage: "",
+          unread: 0,
+        };
+
+        setActiveConvo(newConvoObj);
+        setShowNewChatModal(false);
+      } catch (err) {
+        handleFirestoreError(err, OperationType.WRITE, `conversations/${convoId}`);
+      }
+    },
+    [user, conversations]
+  );
+
+  // 4. Check URL parameter ?user=XYZ to directly open chat window from any profile
+  useEffect(() => {
+    const targetUserId = searchParams.get("user") || searchParams.get("new");
+    if (targetUserId && user && (!activeConvo || activeConvo.otherUser.user_id !== targetUserId)) {
+      openChatWithUser(targetUserId);
+    }
+  }, [searchParams, user, openChatWithUser, activeConvo]);
+
+  // 5. Real-time messages for active conversation
+  useEffect(() => {
+    if (!activeConvo || !user) {
+      setMessages([]);
+      return;
+    }
+
+    const messagesCol = collection(db, "conversations", activeConvo.id, "messages");
+    const q = query(messagesCol, orderBy("created_at", "asc"), limit(100));
+
+    const unsubscribe = onSnapshot(
+      q,
+      (snapshot) => {
+        const msgs = snapshot.docs.map((d) => ({
+          id: d.id,
+          ...d.data(),
+        })) as Message[];
+        setMessages(msgs);
+      },
+      (error) => {
+        handleFirestoreError(error, OperationType.LIST, `conversations/${activeConvo.id}/messages`);
+      }
+    );
+
+    return () => unsubscribe();
+  }, [activeConvo?.id, user?.id]);
+
+  // Scroll to bottom on new message
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages]);
+
+  // 6. Listen for incoming calls across Firestore
+  useEffect(() => {
+    if (!user) return;
+    const callsCol = collection(db, "calls");
+    const q = query(
+      callsCol,
+      where("receiver_id", "==", user.id),
+      where("status", "==", "ringing")
+    );
+
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const activeRing = snapshot.docs[0];
+      if (activeRing && !activeCall) {
+        const callData = activeRing.data();
+        setIncomingCall({
+          callId: activeRing.id,
+          conversationId: callData.conversation_id,
+          callerId: callData.caller_id,
+          callerName: callData.caller_name || "Community Member",
+          callerAvatar: callData.caller_avatar,
+          isVideo: !!callData.is_video,
+        });
+      } else if (!activeRing && incomingCall) {
+        setIncomingCall(null);
+      }
     });
-    setShowNewChat(false);
-    setSearchQuery("");
-    queryClient.invalidateQueries({ queryKey: ["conversations"] });
+
+    return () => unsubscribe();
+  }, [user?.id, activeCall, incomingCall]);
+
+  // 7. Send message
+  const sendMessage = async () => {
+    if (!user || !activeConvo || sending) return;
+    if (!newMessage.trim() && !imagePreview && !voiceBlob) return;
+
+    setSending(true);
+    const content = newMessage.trim();
+    setNewMessage("");
+
+    const messagesCol = collection(db, "conversations", activeConvo.id, "messages");
+    const convoRef = doc(db, "conversations", activeConvo.id);
+    const nowIso = new Date().toISOString();
+
+    try {
+      await addDoc(messagesCol, {
+        conversation_id: activeConvo.id,
+        sender_id: user.id,
+        content: content || "",
+        image_url: imagePreview || null,
+        voice_url: null,
+        read_at: null,
+        created_at: nowIso,
+      });
+
+      await updateDoc(convoRef, {
+        last_message: content || (imagePreview ? "📷 Photo" : "Voice note"),
+        last_message_at: nowIso,
+      });
+
+      setImageFile(null);
+      setImagePreview(null);
+      setVoiceBlob(null);
+    } catch (err) {
+      handleFirestoreError(err, OperationType.CREATE, `conversations/${activeConvo.id}/messages`);
+    } finally {
+      setSending(false);
+    }
+  };
+
+  const deleteMessage = async (msgId: string) => {
+    if (!activeConvo) return;
+    try {
+      await deleteDoc(doc(db, "conversations", activeConvo.id, "messages", msgId));
+    } catch (err) {
+      handleFirestoreError(err, OperationType.DELETE, `conversations/${activeConvo.id}/messages/${msgId}`);
+    }
   };
 
   const handleImageSelect = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
@@ -342,12 +412,6 @@ const Messages = () => {
     const reader = new FileReader();
     reader.onload = () => setImagePreview(reader.result as string);
     reader.readAsDataURL(file);
-  }, []);
-
-  const clearImage = useCallback(() => {
-    setImageFile(null);
-    setImagePreview(null);
-    if (fileInputRef.current) fileInputRef.current.value = "";
   }, []);
 
   // Voice recording
@@ -373,112 +437,55 @@ const Messages = () => {
       setRecordingTime(0);
       timerRef.current = setInterval(() => setRecordingTime((t) => t + 1), 1000);
     } catch (err) {
-      console.error("Mic access denied:", err);
+      console.warn("Mic access denied or unavailable", err);
     }
   };
 
   const stopRecording = () => {
     mediaRecorderRef.current?.stop();
     setIsRecording(false);
-    if (timerRef.current) { clearInterval(timerRef.current); timerRef.current = null; }
-  };
-
-  const clearVoice = () => {
-    setVoiceBlob(null);
-    setRecordingTime(0);
-  };
-
-  const deleteMessage = async (msgId: string) => {
-    setDeletingId(msgId);
-    await supabase.from("messages").delete().eq("id", msgId);
-    setRealtimeMessages((prev) => prev.filter((m) => m.id !== msgId));
-    setDeletingId(null);
-    queryClient.invalidateQueries({ queryKey: ["conversations"] });
-  };
-
-  const sendMessage = async () => {
-    if (!user || !activeConvo || sending) return;
-    if (!newMessage.trim() && !imageFile && !voiceBlob) return;
-
-    setSending(true);
-    const content = newMessage.trim();
-    setNewMessage("");
-
-    let uploadedImageUrl: string | null = null;
-    let uploadedVoiceUrl: string | null = null;
-
-    if (imageFile) {
-      const ext = imageFile.name.split(".").pop() || "jpg";
-      const path = `${user.id}/chat/${activeConvo.id}/${crypto.randomUUID()}.${ext}`;
-      const { error: uploadErr } = await supabase.storage
-        .from("media")
-        .upload(path, imageFile, { contentType: imageFile.type });
-
-      if (!uploadErr) {
-        const { data: urlData } = supabase.storage.from("media").getPublicUrl(path);
-        uploadedImageUrl = urlData.publicUrl;
-      } else {
-        console.error("[chat] image upload failed", uploadErr);
-      }
-      clearImage();
+    if (timerRef.current) {
+      clearInterval(timerRef.current);
+      timerRef.current = null;
     }
-
-    if (voiceBlob) {
-      const path = `${user.id}/chat/${activeConvo.id}/${crypto.randomUUID()}.webm`;
-      const { error: uploadErr } = await supabase.storage
-        .from("media")
-        .upload(path, voiceBlob, { contentType: "audio/webm" });
-
-      if (!uploadErr) {
-        const { data: urlData } = supabase.storage.from("media").getPublicUrl(path);
-        uploadedVoiceUrl = urlData.publicUrl;
-      } else {
-        console.error("[chat] voice upload failed", uploadErr);
-      }
-      clearVoice();
-    }
-
-    await supabase.from("messages").insert({
-      conversation_id: activeConvo.id,
-      sender_id: user.id,
-      content: content || "",
-      image_url: uploadedImageUrl,
-      voice_url: uploadedVoiceUrl,
-    });
-
-    setSending(false);
-    queryClient.invalidateQueries({ queryKey: ["conversations"] });
   };
 
-  // Handle incoming call accept
+  // Accept incoming call
   const acceptIncomingCall = () => {
     if (!incomingCall) return;
-    const convo = conversations.find((c) => c.id === incomingCall.conversationId);
-    if (convo) {
-      setActiveConvo(convo);
-      setActiveCall({ isVideo: incomingCall.isVideo, isIncoming: true });
-    }
-    setIncomingCall(null);
-  };
-
-  const declineIncomingCall = () => {
-    if (!incomingCall) return;
-    const ch = supabase.channel(`call-${incomingCall.conversationId}`, { config: { broadcast: { self: false } } });
-    ch.subscribe((status) => {
-      if (status === "SUBSCRIBED") {
-        ch.send({ type: "broadcast", event: "call-signal", payload: { type: "end", from: user?.id } });
-        setTimeout(() => supabase.removeChannel(ch), 500);
-      }
+    setActiveCall({
+      isVideo: incomingCall.isVideo,
+      isIncoming: true,
+      callId: incomingCall.callId,
     });
     setIncomingCall(null);
   };
 
-  // Active call screen
-  if (activeCall && activeConvo) {
+  const declineIncomingCall = async () => {
+    if (!incomingCall) return;
+    try {
+      await updateDoc(doc(db, "calls", incomingCall.callId), {
+        status: "declined",
+      });
+    } catch {}
+    setIncomingCall(null);
+  };
+
+  // Active call view
+  if (activeCall && (activeConvo || incomingCall)) {
+    const other = activeConvo ? activeConvo.otherUser : {
+      user_id: incomingCall!.callerId,
+      display_name: incomingCall!.callerName,
+      username: "user",
+      avatar_url: incomingCall!.callerAvatar || null,
+    };
+    const convoId = activeConvo ? activeConvo.id : incomingCall!.conversationId;
+
     return (
       <CallScreen
-        conversationId={activeConvo.id}
-        otherUser={activeConvo.otherUser}
+        conversationId={convoId}
+        callId={activeCall.callId}
+        otherUser={other}
         currentUserId={user!.id}
         isVideoCall={activeCall.isVideo}
         isIncoming={activeCall.isIncoming}
@@ -487,187 +494,267 @@ const Messages = () => {
     );
   }
 
-  // Incoming call overlay
-  const incomingCallOverlay = incomingCall && (
-    <div className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-background/95 backdrop-blur-sm">
+  // Incoming call overlay dialog
+  const incomingOverlay = incomingCall && (
+    <div className="fixed inset-0 z-[120] flex flex-col items-center justify-center bg-background/95 backdrop-blur-md p-6">
       <div className="animate-pulse mb-6">
         <img
-          src={conversations.find((c) => c.id === incomingCall.conversationId)?.otherUser.avatar_url || "https://i.pravatar.cc/150"}
+          src={incomingCall.callerAvatar || "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=200&auto=format&fit=crop&q=80"}
           alt=""
-          className="h-24 w-24 rounded-full object-cover border-4 border-primary"
+          className="h-24 w-24 rounded-full object-cover ring-4 ring-primary ring-offset-4 ring-offset-background"
         />
       </div>
       <h2 className="text-xl font-bold text-foreground">
-        {conversations.find((c) => c.id === incomingCall.conversationId)?.otherUser.display_name || "Someone"}
+        {incomingCall.callerName}
       </h2>
-      <p className="mt-2 text-sm text-muted-foreground">
-        Incoming {incomingCall.isVideo ? "video" : "voice"} call...
+      <p className="mt-2 text-sm text-emerald-brand font-medium">
+        Incoming {incomingCall.isVideo ? "Video" : "Voice"} Call...
       </p>
       <div className="mt-8 flex gap-8">
-        <button onClick={declineIncomingCall} className="flex h-16 w-16 items-center justify-center rounded-full bg-destructive text-white shadow-lg">
+        <button
+          onClick={declineIncomingCall}
+          className="flex h-16 w-16 items-center justify-center rounded-full bg-destructive text-white shadow-xl transition-transform active:scale-95"
+        >
           <PhoneOff className="h-7 w-7" />
         </button>
-        <button onClick={acceptIncomingCall} className="flex h-16 w-16 items-center justify-center rounded-full bg-green-500 text-white shadow-lg animate-pulse">
+        <button
+          onClick={acceptIncomingCall}
+          className="flex h-16 w-16 items-center justify-center rounded-full bg-green-500 text-white shadow-xl animate-pulse transition-transform active:scale-95"
+        >
           <Phone className="h-7 w-7" />
         </button>
       </div>
     </div>
   );
 
-  // Chat view
+  // Active Chat Screen
   if (activeConvo) {
     return (
       <div className="flex min-h-screen flex-col pb-20">
-        {incomingCallOverlay}
-        {/* Header */}
-        <div className="flex items-center gap-3 border-b border-border px-4 py-3">
-          <button onClick={() => { setActiveConvo(null); setRealtimeMessages([]); clearImage(); clearVoice(); }} className="text-muted-foreground hover:text-foreground">
-            <ArrowLeft className="h-6 w-6" />
+        {incomingOverlay}
+
+        {/* Chat Header */}
+        <div className="flex items-center gap-3 border-b border-border bg-card/60 backdrop-blur-sm px-4 py-3 sticky top-0 z-30">
+          <button
+            onClick={() => {
+              setActiveConvo(null);
+              setImagePreview(null);
+              setImageFile(null);
+              setVoiceBlob(null);
+            }}
+            className="text-muted-foreground hover:text-foreground p-1 -ml-1 rounded-full hover:bg-secondary"
+          >
+            <ArrowLeft className="h-5 w-5" />
           </button>
-          <div className="relative">
-            <img src={activeConvo.otherUser.avatar_url || "https://i.pravatar.cc/150"} alt="" className="h-9 w-9 rounded-full object-cover" />
+          <div
+            className="relative cursor-pointer"
+            onClick={() => navigate(`/user/${activeConvo.otherUser.user_id}`)}
+          >
+            <img
+              src={activeConvo.otherUser.avatar_url || "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=200&auto=format&fit=crop&q=80"}
+              alt=""
+              className="h-10 w-10 rounded-full object-cover ring-1 ring-border"
+            />
             <OnlineDot lastSeen={activeConvo.otherUser.last_seen} size="sm" />
           </div>
-          <div className="flex-1">
-            <p className="text-sm font-semibold text-foreground">{activeConvo.otherUser.display_name || "User"}</p>
+          <div
+            className="flex-1 cursor-pointer"
+            onClick={() => navigate(`/user/${activeConvo.otherUser.user_id}`)}
+          >
+            <p className="text-sm font-semibold text-foreground leading-tight">
+              {activeConvo.otherUser.display_name || "Community Member"}
+            </p>
             <p className="text-xs text-muted-foreground">
-              {isOnline(activeConvo.otherUser.last_seen) ? "Active now" : `@${activeConvo.otherUser.username || "user"}`}
+              {isOnline(activeConvo.otherUser.last_seen) ? (
+                <span className="text-green-500 font-medium">Active now</span>
+              ) : (
+                `@${activeConvo.otherUser.username || "user"}`
+              )}
             </p>
           </div>
-          {/* Call buttons */}
+
+          {/* Voice and Video Call Triggers */}
           <button
-            onClick={() => setActiveCall({ isVideo: false, isIncoming: false })}
-            className="rounded-full p-2 text-muted-foreground hover:bg-secondary hover:text-foreground"
+            onClick={() =>
+              setActiveCall({
+                isVideo: false,
+                isIncoming: false,
+                callId: `call_${activeConvo.id}_${Date.now()}`,
+              })
+            }
+            className="rounded-full p-2.5 text-muted-foreground hover:bg-secondary hover:text-foreground transition-colors"
+            title="Start Voice Call"
           >
-            <Phone className="h-5 w-5" />
+            <Phone className="h-4 w-4" />
           </button>
           <button
-            onClick={() => setActiveCall({ isVideo: true, isIncoming: false })}
-            className="rounded-full p-2 text-muted-foreground hover:bg-secondary hover:text-foreground"
+            onClick={() =>
+              setActiveCall({
+                isVideo: true,
+                isIncoming: false,
+                callId: `call_${activeConvo.id}_${Date.now()}`,
+              })
+            }
+            className="rounded-full p-2.5 text-muted-foreground hover:bg-secondary hover:text-foreground transition-colors"
+            title="Start Video Call"
           >
-            <Video className="h-5 w-5" />
+            <Video className="h-4 w-4" />
           </button>
         </div>
 
-        {/* Messages */}
+        {/* Message Stream */}
         <div className="flex-1 overflow-y-auto px-4 py-4 space-y-3">
-          {realtimeMessages.map((msg) => {
-            const isMine = msg.sender_id === user?.id;
-            return (
-              <div key={msg.id} className={`group flex ${isMine ? "justify-end" : "justify-start"}`}>
-                {/* Delete button for own messages */}
-                {isMine && (
-                  <button
-                    onClick={() => deleteMessage(msg.id)}
-                    disabled={deletingId === msg.id}
-                    className="mr-1 self-center opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-destructive"
-                  >
-                    <Trash2 className="h-3.5 w-3.5" />
-                  </button>
-                )}
-                <div className={`max-w-[75%] rounded-2xl px-4 py-2.5 text-sm ${
-                  isMine
-                    ? "bg-primary text-primary-foreground rounded-br-md"
-                    : "bg-card text-foreground border border-border rounded-bl-md"
-                }`}>
-                  {msg.image_url && (
-                    <img
-                      src={msg.image_url}
-                      alt="Shared photo"
-                      className="mb-2 max-h-60 w-full rounded-xl object-cover cursor-pointer"
-                      onClick={() => window.open(msg.image_url!, "_blank")}
-                    />
+          {messages.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-16 text-center text-muted-foreground">
+              <div className="h-12 w-12 rounded-2xl bg-secondary flex items-center justify-center text-primary mb-3">
+                <Sparkles className="h-6 w-6" />
+              </div>
+              <p className="text-sm font-semibold text-foreground">
+                Say As-salamu alaykum!
+              </p>
+              <p className="text-xs text-muted-foreground mt-1 max-w-xs">
+                Start a meaningful conversation with {activeConvo.otherUser.display_name}.
+              </p>
+            </div>
+          ) : (
+            messages.map((msg) => {
+              const isMine = msg.sender_id === user?.id;
+              return (
+                <div
+                  key={msg.id}
+                  className={`group flex items-end gap-1.5 ${
+                    isMine ? "justify-end" : "justify-start"
+                  }`}
+                >
+                  {isMine && (
+                    <button
+                      onClick={() => deleteMessage(msg.id)}
+                      className="opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-destructive p-1 transition-opacity"
+                      title="Delete"
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </button>
                   )}
-                  {msg.voice_url && <VoicePlayer url={msg.voice_url} />}
-                  {msg.content && <p>{msg.content}</p>}
-                  <div className={`mt-1 flex items-center gap-1 ${isMine ? "justify-end" : ""}`}>
-                    <span className={`text-[10px] ${isMine ? "text-primary-foreground/60" : "text-muted-foreground"}`}>
-                      {formatDistanceToNow(new Date(msg.created_at), { addSuffix: false })}
-                    </span>
-                    {isMine && (
-                      msg.read_at
-                        ? <CheckCheck className="h-3.5 w-3.5 text-blue-400" />
-                        : <Check className="h-3.5 w-3.5 text-primary-foreground/50" />
+                  <div
+                    className={`max-w-[80%] rounded-2xl px-4 py-2.5 text-sm shadow-sm ${
+                      isMine
+                        ? "gradient-primary text-primary-foreground rounded-br-xs"
+                        : "bg-card text-foreground border border-border rounded-bl-xs"
+                    }`}
+                  >
+                    {msg.image_url && (
+                      <img
+                        src={msg.image_url}
+                        alt="Attached media"
+                        className="mb-2 max-h-60 w-full rounded-xl object-cover cursor-pointer"
+                        onClick={() => window.open(msg.image_url!, "_blank")}
+                      />
                     )}
+                    {msg.content && <p className="leading-relaxed">{msg.content}</p>}
+                    <div
+                      className={`mt-1 flex items-center gap-1 text-[10px] ${
+                        isMine ? "justify-end text-primary-foreground/75" : "text-muted-foreground"
+                      }`}
+                    >
+                      <span>
+                        {msg.created_at
+                          ? formatDistanceToNow(new Date(msg.created_at), { addSuffix: false })
+                          : "just now"}
+                      </span>
+                      {isMine && (
+                        msg.read_at ? (
+                          <CheckCheck className="h-3 w-3 text-emerald-200" />
+                        ) : (
+                          <Check className="h-3 w-3 text-primary-foreground/70" />
+                        )
+                      )}
+                    </div>
                   </div>
                 </div>
-              </div>
-            );
-          })}
+              );
+            })
+          )}
           <div ref={messagesEndRef} />
         </div>
 
-        {/* Image preview */}
+        {/* Image Attachment Preview */}
         {imagePreview && (
-          <div className="border-t border-border px-4 py-2">
+          <div className="border-t border-border bg-card px-4 py-2">
             <div className="relative inline-block">
-              <img src={imagePreview} alt="Preview" className="h-20 w-20 rounded-xl object-cover" />
-              <button onClick={clearImage} className="absolute -right-2 -top-2 flex h-5 w-5 items-center justify-center rounded-full bg-destructive text-destructive-foreground">
+              <img
+                src={imagePreview}
+                alt="Upload preview"
+                className="h-20 w-20 rounded-xl object-cover ring-1 ring-border"
+              />
+              <button
+                onClick={() => {
+                  setImageFile(null);
+                  setImagePreview(null);
+                }}
+                className="absolute -right-2 -top-2 flex h-5 w-5 items-center justify-center rounded-full bg-destructive text-white shadow-md"
+              >
                 <X className="h-3 w-3" />
               </button>
             </div>
           </div>
         )}
 
-        {/* Voice preview */}
-        {voiceBlob && !isRecording && (
-          <div className="border-t border-border px-4 py-2">
-            <div className="flex items-center gap-2 rounded-xl bg-secondary px-3 py-2">
-              <Mic className="h-4 w-4 text-primary" />
-              <span className="text-sm text-foreground">Voice note ready</span>
-              <button onClick={clearVoice} className="ml-auto text-muted-foreground hover:text-destructive">
-                <X className="h-4 w-4" />
-              </button>
-            </div>
-          </div>
-        )}
-
-        {/* Input */}
-        <div className="border-t border-border px-4 py-3">
+        {/* Composer */}
+        <div className="border-t border-border bg-card/80 backdrop-blur-md px-4 py-3 sticky bottom-0">
           <div className="flex items-center gap-2">
-            <input type="file" ref={fileInputRef} accept="image/*" onChange={handleImageSelect} className="hidden" />
-            <button onClick={() => fileInputRef.current?.click()} className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-muted-foreground hover:bg-secondary hover:text-foreground">
+            <input
+              type="file"
+              ref={fileInputRef}
+              accept="image/*"
+              onChange={handleImageSelect}
+              className="hidden"
+            />
+            <button
+              onClick={() => fileInputRef.current?.click()}
+              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-muted-foreground hover:bg-secondary hover:text-foreground transition-colors"
+            >
               <ImagePlus className="h-5 w-5" />
             </button>
 
             {isRecording ? (
-              <div className="flex flex-1 items-center gap-2 rounded-full bg-destructive/10 px-4 py-2.5">
+              <div className="flex flex-1 items-center gap-2 rounded-full bg-destructive/10 px-4 py-2">
                 <span className="h-2 w-2 rounded-full bg-destructive animate-pulse" />
-                <span className="text-sm text-destructive font-medium tabular-nums">
-                  {Math.floor(recordingTime / 60)}:{String(recordingTime % 60).padStart(2, "0")}
+                <span className="text-xs font-semibold text-destructive tabular-nums">
+                  {Math.floor(recordingTime / 60)}:
+                  {String(recordingTime % 60).padStart(2, "0")}
                 </span>
-                <span className="text-sm text-muted-foreground">Recording...</span>
+                <span className="text-xs text-muted-foreground">Recording voice note...</span>
               </div>
             ) : (
               <input
                 value={newMessage}
                 onChange={(e) => setNewMessage(e.target.value)}
                 onKeyDown={(e) => e.key === "Enter" && !e.shiftKey && sendMessage()}
-                placeholder="Type a message..."
-                className="flex-1 rounded-full bg-secondary px-4 py-2.5 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none"
+                placeholder="Type your message..."
+                className="flex-1 rounded-full bg-secondary/70 px-4 py-2.5 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary"
               />
             )}
 
-            {/* Mic / Stop button */}
-            {!newMessage.trim() && !imageFile && !voiceBlob ? (
+            {!newMessage.trim() && !imagePreview && (
               <button
                 onClick={isRecording ? stopRecording : startRecording}
-                className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full ${
-                  isRecording ? "bg-destructive text-destructive-foreground" : "text-muted-foreground hover:bg-secondary hover:text-foreground"
+                className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full transition-colors ${
+                  isRecording
+                    ? "bg-destructive text-destructive-foreground animate-pulse"
+                    : "text-muted-foreground hover:bg-secondary hover:text-foreground"
                 }`}
               >
                 {isRecording ? <Square className="h-4 w-4" /> : <Mic className="h-5 w-5" />}
               </button>
-            ) : null}
+            )}
 
-            {/* Send button */}
-            {(newMessage.trim() || imageFile || voiceBlob) && (
+            {(newMessage.trim() || imagePreview) && (
               <button
                 onClick={sendMessage}
                 disabled={sending}
-                className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground disabled:opacity-40 shadow-glow"
+                className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full gradient-primary text-primary-foreground shadow-glow transition-transform active:scale-95 disabled:opacity-40"
               >
-                {sending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-5 w-5" />}
+                {sending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
               </button>
             )}
           </div>
@@ -676,92 +763,257 @@ const Messages = () => {
     );
   }
 
-  // New chat search
-  if (showNewChat) {
-    return (
-      <div className="pb-20">
-        {incomingCallOverlay}
-        <div className="flex items-center gap-3 border-b border-border px-4 py-3">
-          <button onClick={() => { setShowNewChat(false); setSearchQuery(""); }} className="text-muted-foreground hover:text-foreground">
-            <ArrowLeft className="h-6 w-6" />
-          </button>
-          <h1 className="text-base font-semibold text-foreground">New Message</h1>
-        </div>
-        <div className="px-4 py-3">
-          <div className="flex items-center gap-3 rounded-xl bg-secondary px-4 py-2.5">
-            <Search className="h-4 w-4 text-muted-foreground" />
-            <input
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Search people..."
-              className="w-full bg-transparent text-sm text-foreground placeholder:text-muted-foreground focus:outline-none"
-              autoFocus
-            />
-          </div>
-        </div>
-        <div className="divide-y divide-border">
-          {searchResults.map((p) => (
-            <button key={p.user_id} onClick={() => startConversation(p.user_id)} className="flex w-full items-center gap-3 px-4 py-3 hover:bg-secondary transition-colors">
-              <div className="relative">
-                <img src={p.avatar_url || "https://i.pravatar.cc/150"} alt="" className="h-11 w-11 rounded-full object-cover" />
-                <OnlineDot lastSeen={p.last_seen} />
-              </div>
-              <div className="text-left">
-                <p className="text-sm font-semibold text-foreground">{p.display_name || "User"}</p>
-                <p className="text-xs text-muted-foreground">
-                  {isOnline(p.last_seen) ? "Active now" : `@${p.username || "user"}`}
-                </p>
-              </div>
-            </button>
-          ))}
-        </div>
-      </div>
-    );
-  }
+  // Filtered search list
+  const filteredConvos = conversations.filter((c) =>
+    (c.otherUser.display_name || "").toLowerCase().includes(searchQuery.toLowerCase()) ||
+    (c.otherUser.username || "").toLowerCase().includes(searchQuery.toLowerCase())
+  );
 
-  // Conversations list
+  const filteredCommunity = allCommunityUsers.filter((u) =>
+    (u.display_name || "").toLowerCase().includes(searchQuery.toLowerCase()) ||
+    (u.username || "").toLowerCase().includes(searchQuery.toLowerCase())
+  );
+
+  // Conversations List & Quick New Chat View
   return (
-    <div className="pb-20">
-      {incomingCallOverlay}
-      <div className="flex items-center justify-between border-b border-border px-4 py-3">
-        <h1 className="font-display text-xl font-bold text-foreground">Messages</h1>
-        <button onClick={() => setShowNewChat(true)} className="rounded-full p-2 text-muted-foreground hover:bg-secondary hover:text-foreground">
-          <Edit className="h-5 w-5" />
+    <div className="pb-24">
+      {incomingOverlay}
+
+      {/* Top Header */}
+      <div className="flex items-center justify-between border-b border-border px-4 py-3.5 bg-card/40 backdrop-blur-sm sticky top-0 z-30">
+        <div>
+          <h1 className="font-display text-2xl font-bold text-foreground">Messages</h1>
+          <p className="text-xs text-muted-foreground">Direct chats & calls with the Ummah</p>
+        </div>
+        <button
+          onClick={() => setShowNewChatModal(true)}
+          className="flex items-center gap-1.5 rounded-xl gradient-primary px-3.5 py-2 text-xs font-semibold text-primary-foreground shadow-glow transition-transform active:scale-95"
+        >
+          <Plus className="h-4 w-4" />
+          <span>New Chat</span>
         </button>
       </div>
 
-      {convosLoading ? (
-        <div className="flex justify-center py-20"><Loader2 className="h-6 w-6 animate-spin text-primary" /></div>
-      ) : conversations.length === 0 ? (
-        <div className="flex flex-col items-center justify-center py-20 px-4 text-center">
-          <div className="flex h-16 w-16 items-center justify-center rounded-full bg-secondary mb-4">
-            <Edit className="h-8 w-8 text-muted-foreground" />
-          </div>
-          <h2 className="text-lg font-semibold text-foreground">No messages yet</h2>
-          <p className="mt-1 text-sm text-muted-foreground">Start a conversation with someone from the community</p>
-          <button onClick={() => setShowNewChat(true)} className="mt-4 rounded-xl bg-primary px-6 py-2.5 text-sm font-semibold text-primary-foreground shadow-glow">
-            New Message
-          </button>
-        </div>
-      ) : (
-        <div className="divide-y divide-border">
-          {conversations.map((convo) => (
-            <button key={convo.id} onClick={() => setActiveConvo(convo)} className="flex w-full items-center gap-3 px-4 py-3 hover:bg-secondary transition-colors">
-              <div className="relative">
-                <img src={convo.otherUser.avatar_url || "https://i.pravatar.cc/150"} alt="" className="h-12 w-12 rounded-full object-cover" />
-                <OnlineDot lastSeen={convo.otherUser.last_seen} size="md" />
-              </div>
-              <div className="flex-1 text-left">
-                <div className="flex items-center justify-between">
-                  <p className="text-sm font-semibold text-foreground">{convo.otherUser.display_name || "User"}</p>
-                  {convo.lastMessageAt && (
-                    <span className="text-xs text-muted-foreground">{formatDistanceToNow(new Date(convo.lastMessageAt), { addSuffix: false })}</span>
-                  )}
-                </div>
-                <p className="truncate text-xs text-muted-foreground">{convo.lastMessage || "Start chatting..."}</p>
-              </div>
+      {/* Prominent Search Bar */}
+      <div className="px-4 pt-3 pb-2">
+        <div className="flex items-center gap-2.5 rounded-xl bg-secondary/60 px-3.5 py-2.5 border border-border/80 focus-within:border-primary/50 transition-all">
+          <Search className="h-4 w-4 text-muted-foreground shrink-0" />
+          <input
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder="Search conversations or start new chat..."
+            className="w-full bg-transparent text-sm text-foreground placeholder:text-muted-foreground focus:outline-none"
+          />
+          {searchQuery && (
+            <button onClick={() => setSearchQuery("")} className="text-muted-foreground hover:text-foreground">
+              <X className="h-3.5 w-3.5" />
             </button>
-          ))}
+          )}
+        </div>
+      </div>
+
+      {/* Quick Message Strip - 1 Tap to start conversation */}
+      {allCommunityUsers.length > 0 && !searchQuery && (
+        <div className="py-2.5 border-b border-border/50">
+          <div className="flex items-center justify-between px-4 mb-2">
+            <span className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">
+              Quick Connect
+            </span>
+            <button
+              onClick={() => setShowNewChatModal(true)}
+              className="text-xs text-emerald-brand hover:underline"
+            >
+              View all
+            </button>
+          </div>
+          <div className="flex gap-3 overflow-x-auto px-4 scrollbar-hide py-1">
+            {allCommunityUsers.slice(0, 10).map((member) => (
+              <button
+                key={member.user_id}
+                onClick={() => openChatWithUser(member.user_id)}
+                className="flex flex-col items-center gap-1.5 shrink-0 group"
+              >
+                <div className="relative">
+                  <img
+                    src={member.avatar_url || `https://api.dicebear.com/7.x/identicon/svg?seed=${member.user_id}`}
+                    alt={member.display_name || "User"}
+                    className="h-13 w-13 rounded-full object-cover ring-2 ring-primary/40 group-hover:ring-primary transition-all group-hover:scale-105"
+                  />
+                  <OnlineDot lastSeen={member.last_seen} size="sm" />
+                </div>
+                <span className="text-[11px] font-medium text-foreground max-w-[60px] truncate">
+                  {member.display_name?.split(" ")[0] || "User"}
+                </span>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Search results mode when typing in search bar */}
+      {searchQuery && (
+        <div className="px-4 py-2">
+          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">
+            Community Search Results
+          </p>
+          {filteredCommunity.length === 0 ? (
+            <div className="py-8 text-center text-xs text-muted-foreground">
+              No matching profiles found
+            </div>
+          ) : (
+            <div className="divide-y divide-border rounded-xl border border-border bg-card overflow-hidden">
+              {filteredCommunity.map((u) => (
+                <button
+                  key={u.user_id}
+                  onClick={() => {
+                    openChatWithUser(u.user_id);
+                    setSearchQuery("");
+                  }}
+                  className="flex w-full items-center gap-3 px-4 py-3 hover:bg-secondary/60 text-left transition-colors"
+                >
+                  <img
+                    src={u.avatar_url || `https://api.dicebear.com/7.x/identicon/svg?seed=${u.user_id}`}
+                    alt=""
+                    className="h-10 w-10 rounded-full object-cover ring-1 ring-border"
+                  />
+                  <div className="flex-1">
+                    <p className="text-sm font-semibold text-foreground">
+                      {u.display_name || "Community Member"}
+                    </p>
+                    <p className="text-xs text-muted-foreground">@{u.username || "member"}</p>
+                  </div>
+                  <span className="text-xs font-semibold text-emerald-brand bg-primary/10 px-2.5 py-1 rounded-full">
+                    Chat
+                  </span>
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Main Conversation List */}
+      {!searchQuery && (
+        <div>
+          {convosLoading ? (
+            <div className="flex justify-center py-20">
+              <Loader2 className="h-6 w-6 animate-spin text-primary" />
+            </div>
+          ) : conversations.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-16 px-4 text-center">
+              <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-secondary mb-4 text-primary shadow-sm">
+                <Plus className="h-8 w-8" />
+              </div>
+              <h2 className="text-lg font-semibold text-foreground">No conversations yet</h2>
+              <p className="mt-1 text-xs text-muted-foreground max-w-xs">
+                Connect and exchange reminders, career advice, and friendship with Muslims worldwide.
+              </p>
+              <button
+                onClick={() => setShowNewChatModal(true)}
+                className="mt-5 rounded-xl gradient-primary px-6 py-2.5 text-xs font-semibold text-primary-foreground shadow-glow transition-transform active:scale-95"
+              >
+                Start Your First Chat
+              </button>
+            </div>
+          ) : (
+            <div className="divide-y divide-border">
+              {filteredConvos.map((convo) => (
+                <button
+                  key={convo.id}
+                  onClick={() => setActiveConvo(convo)}
+                  className="flex w-full items-center gap-3.5 px-4 py-3.5 hover:bg-secondary/40 transition-colors text-left"
+                >
+                  <div className="relative">
+                    <img
+                      src={convo.otherUser.avatar_url || "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=200&auto=format&fit=crop&q=80"}
+                      alt=""
+                      className="h-12 w-12 rounded-full object-cover ring-1 ring-border"
+                    />
+                    <OnlineDot lastSeen={convo.otherUser.last_seen} size="md" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center justify-between mb-0.5">
+                      <p className="text-sm font-semibold text-foreground truncate">
+                        {convo.otherUser.display_name || "Community Member"}
+                      </p>
+                      {convo.lastMessageAt && (
+                        <span className="text-[11px] text-muted-foreground shrink-0 ml-2">
+                          {formatDistanceToNow(new Date(convo.lastMessageAt), { addSuffix: false })}
+                        </span>
+                      )}
+                    </div>
+                    <p className="truncate text-xs text-muted-foreground">
+                      {convo.lastMessage || "Click to start chatting..."}
+                    </p>
+                  </div>
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* New Chat Modal / Sheet */}
+      {showNewChatModal && (
+        <div className="fixed inset-0 z-[110] flex items-center justify-center bg-background/80 backdrop-blur-md p-4">
+          <div className="w-full max-w-md rounded-2xl border border-border bg-card p-5 shadow-2xl flex flex-col max-h-[85vh]">
+            <div className="flex items-center justify-between pb-3 border-b border-border">
+              <h2 className="font-display text-lg font-bold text-foreground">Start New Chat</h2>
+              <button
+                onClick={() => setShowNewChatModal(false)}
+                className="text-muted-foreground hover:text-foreground p-1 rounded-full hover:bg-secondary"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <div className="py-3">
+              <div className="flex items-center gap-2 rounded-xl bg-secondary/60 px-3 py-2 border border-border">
+                <Search className="h-4 w-4 text-muted-foreground" />
+                <input
+                  placeholder="Search by name or handle..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="w-full bg-transparent text-sm text-foreground placeholder:text-muted-foreground focus:outline-none"
+                  autoFocus
+                />
+              </div>
+            </div>
+
+            <div className="flex-1 overflow-y-auto divide-y divide-border">
+              {filteredCommunity.length === 0 ? (
+                <p className="py-10 text-center text-xs text-muted-foreground">
+                  No members found
+                </p>
+              ) : (
+                filteredCommunity.map((m) => (
+                  <button
+                    key={m.user_id}
+                    onClick={() => openChatWithUser(m.user_id)}
+                    className="flex w-full items-center gap-3 px-3 py-3 hover:bg-secondary/60 rounded-xl transition-colors text-left"
+                  >
+                    <div className="relative">
+                      <img
+                        src={m.avatar_url || `https://api.dicebear.com/7.x/identicon/svg?seed=${m.user_id}`}
+                        alt=""
+                        className="h-11 w-11 rounded-full object-cover ring-1 ring-border"
+                      />
+                      <OnlineDot lastSeen={m.last_seen} />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-semibold text-foreground truncate">
+                        {m.display_name || "Community Member"}
+                      </p>
+                      <p className="text-xs text-muted-foreground">@{m.username || "member"}</p>
+                    </div>
+                    <span className="text-xs font-semibold text-emerald-brand bg-primary/10 px-3 py-1 rounded-full">
+                      Message
+                    </span>
+                  </button>
+                ))
+              )}
+            </div>
+          </div>
         </div>
       )}
     </div>

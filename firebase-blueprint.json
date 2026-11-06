@@ -1,0 +1,147 @@
+{
+  "entities": {
+    "Profile": {
+      "title": "Profile",
+      "description": "User profile information",
+      "type": "object",
+      "properties": {
+        "user_id": { "type": "string", "description": "The user ID" },
+        "username": { "type": "string", "description": "The username handle" },
+        "display_name": { "type": "string", "description": "Display name" },
+        "avatar_url": { "type": "string", "description": "Avatar image URL" },
+        "bio": { "type": "string", "description": "Profile biography" },
+        "interests": { "type": "array", "description": "List of user interests" },
+        "city": { "type": "string", "description": "City" },
+        "country": { "type": "string", "description": "Country" },
+        "verified": { "type": "boolean", "description": "Verification status" },
+        "has_completed_onboarding": { "type": "boolean", "description": "Whether onboarding has been completed" },
+        "followers_count": { "type": "number", "description": "Number of followers" },
+        "following_count": { "type": "number", "description": "Number of following" },
+        "last_seen": { "type": "string", "description": "Last seen ISO timestamp" },
+        "created_at": { "type": "string", "description": "Creation ISO timestamp" },
+        "updated_at": { "type": "string", "description": "Update ISO timestamp" }
+      },
+      "required": ["user_id"]
+    },
+    "Conversation": {
+      "title": "Conversation",
+      "description": "Chat conversation between users",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Conversation ID" },
+        "participant_ids": { "type": "array", "description": "User IDs of participants" },
+        "last_message": { "type": "string", "description": "Latest message snippet" },
+        "last_message_at": { "type": "string", "description": "Timestamp of latest message" },
+        "created_at": { "type": "string", "description": "Creation timestamp" }
+      },
+      "required": ["id", "participant_ids"]
+    },
+    "Message": {
+      "title": "Message",
+      "description": "Message in a conversation",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Message ID" },
+        "conversation_id": { "type": "string", "description": "Associated conversation ID" },
+        "sender_id": { "type": "string", "description": "Sender user ID" },
+        "content": { "type": "string", "description": "Text message content" },
+        "image_url": { "type": "string", "description": "Attached image URL" },
+        "voice_url": { "type": "string", "description": "Attached voice recording URL" },
+        "read_at": { "type": "string", "description": "Read timestamp" },
+        "created_at": { "type": "string", "description": "Creation timestamp" }
+      },
+      "required": ["conversation_id", "sender_id"]
+    },
+    "Call": {
+      "title": "Call",
+      "description": "WebRTC voice or video call signaling session",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Call ID" },
+        "conversation_id": { "type": "string", "description": "Conversation ID" },
+        "caller_id": { "type": "string", "description": "Caller user ID" },
+        "caller_name": { "type": "string", "description": "Caller display name" },
+        "caller_avatar": { "type": "string", "description": "Caller avatar URL" },
+        "receiver_id": { "type": "string", "description": "Receiver user ID" },
+        "is_video": { "type": "boolean", "description": "Whether video is enabled" },
+        "status": { "type": "string", "description": "Call state: ringing, connecting, connected, ended, declined" },
+        "offer": { "type": "string", "description": "Serialized SDP offer" },
+        "answer": { "type": "string", "description": "Serialized SDP answer" },
+        "created_at": { "type": "string", "description": "Creation timestamp" }
+      },
+      "required": ["caller_id", "receiver_id", "status"]
+    },
+    "IceCandidate": {
+      "title": "IceCandidate",
+      "description": "WebRTC ICE candidate payload",
+      "type": "object",
+      "properties": {
+        "candidate": { "type": "string", "description": "Serialized candidate data" },
+        "from": { "type": "string", "description": "Sender UID" },
+        "created_at": { "type": "string", "description": "Timestamp" }
+      },
+      "required": ["candidate", "from"]
+    },
+    "Post": {
+      "title": "Post",
+      "description": "Community post or media upload",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Post ID" },
+        "user_id": { "type": "string", "description": "Creator user ID" },
+        "caption": { "type": "string", "description": "Post caption or text" },
+        "media_url": { "type": "string", "description": "Media URL" },
+        "media_type": { "type": "string", "description": "Media type" },
+        "likes_count": { "type": "number", "description": "Likes counter" },
+        "comments_count": { "type": "number", "description": "Comments counter" },
+        "created_at": { "type": "string", "description": "Creation timestamp" }
+      },
+      "required": ["user_id"]
+    },
+    "Follow": {
+      "title": "Follow",
+      "description": "Follow relationship between community members",
+      "type": "object",
+      "properties": {
+        "follower_id": { "type": "string", "description": "Follower user ID" },
+        "following_id": { "type": "string", "description": "Target user ID being followed" },
+        "created_at": { "type": "string", "description": "Creation timestamp" }
+      },
+      "required": ["follower_id", "following_id"]
+    }
+  },
+  "firestore": {
+    "/profiles/{userId}": {
+      "schema": "Profile",
+      "description": "Public community member profiles"
+    },
+    "/conversations/{conversationId}": {
+      "schema": "Conversation",
+      "description": "Chat conversations"
+    },
+    "/conversations/{conversationId}/messages/{messageId}": {
+      "schema": "Message",
+      "description": "Individual messages in a conversation"
+    },
+    "/calls/{callId}": {
+      "schema": "Call",
+      "description": "Live audio and video call signaling sessions"
+    },
+    "/calls/{callId}/callerCandidates/{candId}": {
+      "schema": "IceCandidate",
+      "description": "Caller ICE candidates"
+    },
+    "/calls/{callId}/calleeCandidates/{candId}": {
+      "schema": "IceCandidate",
+      "description": "Callee ICE candidates"
+    },
+    "/posts/{postId}": {
+      "schema": "Post",
+      "description": "Public feed posts"
+    },
+    "/follows/{followId}": {
+      "schema": "Follow",
+      "description": "Social graph connections"
+    }
+  }
+}

@@ -8,6 +8,8 @@ import { fetchPostsWithProfiles } from "@/lib/posts";
 import PostCard from "@/components/PostCard";
 import VerifiedBadge from "@/components/VerifiedBadge";
 import FollowListSheet from "@/components/FollowListSheet";
+import { doc, getDoc } from "firebase/firestore";
+import { db } from "@/lib/firebase";
 
 const UserProfile = ({ userId }: { userId: string }) => {
   const { user } = useAuth();
@@ -19,8 +21,21 @@ const UserProfile = ({ userId }: { userId: string }) => {
   const { data: profile, isLoading } = useQuery({
     queryKey: ["profile", userId],
     queryFn: async () => {
-      const { data } = await supabase.from("profiles").select("*").eq("user_id", userId).single();
-      return data;
+      try {
+        const snap = await getDoc(doc(db, "profiles", userId));
+        if (snap.exists()) return snap.data();
+      } catch (e) {
+        console.warn("Firestore profile fetch error:", e);
+      }
+      return {
+        user_id: userId,
+        display_name: "Community Member",
+        username: "member",
+        avatar_url: `https://api.dicebear.com/7.x/identicon/svg?seed=${userId}`,
+        bio: "",
+        followers_count: 0,
+        following_count: 0,
+      };
     },
   });
 
@@ -56,7 +71,7 @@ const UserProfile = ({ userId }: { userId: string }) => {
   };
 
   const handleMessage = async () => {
-    navigate("/messages");
+    navigate(`/messages?user=${userId}`);
   };
 
   if (isLoading) {

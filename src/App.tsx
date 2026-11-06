@@ -22,6 +22,7 @@ import Welcome from "@/pages/Welcome";
 import UserProfilePage from "@/pages/UserProfilePage";
 import Jobs from "@/pages/Jobs";
 import NotFound from "@/pages/NotFound";
+import { OnboardingModal } from "@/components/OnboardingModal";
 
 // Lazy heavier routes to shrink initial bundle
 const UploadWizard = lazy(() => import("@/components/upload/UploadWizard"));
@@ -81,7 +82,7 @@ const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
 };
 
 const AppRoutes = () => {
-  const { user } = useAuth();
+  const { user, needsOnboarding } = useAuth();
   const loc = useLocation();
   const onAdmin = loc.pathname.startsWith("/admin");
 
@@ -136,6 +137,7 @@ const AppRoutes = () => {
       </Routes>
       </Suspense>
       </ErrorBoundary>
+      {user && needsOnboarding && <OnboardingModal />}
       {!onAdmin && <BottomNav />}
       <OfflineIndicator />
       <UploadStatus />

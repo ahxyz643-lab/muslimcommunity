@@ -1,9 +1,20 @@
 import { useState, useEffect, useRef, useCallback } from "react";
-import { Phone, PhoneOff, Mic, MicOff, Video, VideoOff, X } from "lucide-react";
-import { supabase } from "@/integrations/supabase/client";
+import { Phone, PhoneOff, Mic, MicOff, Video, VideoOff } from "lucide-react";
+import {
+  doc,
+  setDoc,
+  updateDoc,
+  collection,
+  addDoc,
+  onSnapshot,
+  getDoc,
+  serverTimestamp,
+} from "firebase/firestore";
+import { db, handleFirestoreError, OperationType } from "@/lib/firebase";
 
 interface CallScreenProps {
   conversationId: string;
+  callId?: string;
   otherUser: {
     user_id: string;
     display_name: string | null;
@@ -22,11 +33,13 @@ const ICE_SERVERS: RTCConfiguration = {
   iceServers: [
     { urls: "stun:stun.l.google.com:19302" },
     { urls: "stun:stun1.l.google.com:19302" },
+    { urls: "stun:stun2.l.google.com:19302" },
   ],
 };
 
 const CallScreen = ({
   conversationId,
+  callId: initialCallId,
   otherUser,
   currentUserId,
   isVideoCall,
@@ -38,23 +51,23 @@ const CallScreen = ({
   const [isVideoEnabled, setIsVideoEnabled] = useState(isVideoCall);
   const [callDuration, setCallDuration] = useState(0);
 
+  const [activeCallId, setActiveCallId] = useState<string>(initialCallId || conversationId);
+
   const pcRef = useRef<RTCPeerConnection | null>(null);
   const localStreamRef = useRef<MediaStream | null>(null);
   const localVideoRef = useRef<HTMLVideoElement>(null);
   const remoteVideoRef = useRef<HTMLVideoElement>(null);
-  const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const endedRef = useRef(false);
-  const iceCandidateQueue = useRef<RTCIceCandidateInit[]>([]);
+  const unsubCallRef = useRef<(() => void) | null>(null);
+  const unsubCandRef = useRef<(() => void) | null>(null);
 
-  const channelName = `call-${conversationId}`;
-
-  // Ringtone via WebAudio (no asset needed)
+  // Ringtone via WebAudio
   const ringAudioRef = useRef<{ ctx: AudioContext; stop: () => void } | null>(null);
   const startRingtone = useCallback((incoming: boolean) => {
     if (ringAudioRef.current) return;
     try {
-      const Ctx = (window.AudioContext || (window as any).webkitAudioContext);
+      const Ctx = window.AudioContext || (window as any).webkitAudioContext;
       if (!Ctx) return;
       const ctx = new Ctx();
       const master = ctx.createGain();
@@ -68,7 +81,7 @@ const CallScreen = ({
         osc.type = "sine";
         osc.frequency.value = freq;
         g.gain.setValueAtTime(0.0001, when);
-        g.gain.exponentialRampToValueAtTime(0.25, when + 0.02);
+        g.gain.exponentialRampToValueAtTime(0.2, when + 0.02);
         g.gain.exponentialRampToValueAtTime(0.0001, when + dur);
         osc.connect(g).connect(master);
         osc.start(when);
@@ -79,13 +92,11 @@ const CallScreen = ({
         if (stopped) return;
         const t = ctx.currentTime;
         if (incoming) {
-          // Phone-style ring: two beeps then pause
           playBeep(440, 0.4, t);
           playBeep(480, 0.4, t + 0.5);
           playBeep(440, 0.4, t + 1.2);
           playBeep(480, 0.4, t + 1.7);
         } else {
-          // Outgoing ringback tone
           playBeep(420, 1.0, t);
           playBeep(420, 1.0, t + 2.0);
         }
@@ -107,12 +118,12 @@ const CallScreen = ({
       console.warn("Ringtone unavailable", e);
     }
   }, []);
+
   const stopRingtone = useCallback(() => {
     ringAudioRef.current?.stop();
     ringAudioRef.current = null;
   }, []);
 
-  // Play/stop ringtone based on call state
   useEffect(() => {
     if (callState === "ringing") {
       startRingtone(isIncoming);
@@ -122,30 +133,33 @@ const CallScreen = ({
     return () => stopRingtone();
   }, [callState, isIncoming, startRingtone, stopRingtone]);
 
-  const cleanup = useCallback(() => {
+  const cleanup = useCallback(async () => {
     if (endedRef.current) return;
     endedRef.current = true;
     if (timerRef.current) clearInterval(timerRef.current);
-    ringAudioRef.current?.stop();
-    ringAudioRef.current = null;
+    stopRingtone();
+
+    if (unsubCallRef.current) unsubCallRef.current();
+    if (unsubCandRef.current) unsubCandRef.current();
+
     localStreamRef.current?.getTracks().forEach((t) => t.stop());
     pcRef.current?.close();
     pcRef.current = null;
-    if (channelRef.current) {
-      channelRef.current.send({
-        type: "broadcast",
-        event: "call-signal",
-        payload: { type: "end", from: currentUserId },
-      });
-      setTimeout(() => {
-        if (channelRef.current) supabase.removeChannel(channelRef.current);
-      }, 500);
-    }
-    setCallState("ended");
-    setTimeout(onEnd, 1000);
-  }, [currentUserId, onEnd]);
 
-  // Start call duration timer
+    try {
+      if (activeCallId) {
+        await updateDoc(doc(db, "calls", activeCallId), {
+          status: "ended",
+        });
+      }
+    } catch {
+      // ignore write error on call end
+    }
+
+    setCallState("ended");
+    setTimeout(onEnd, 800);
+  }, [activeCallId, onEnd, stopRingtone]);
+
   useEffect(() => {
     if (callState === "connected") {
       timerRef.current = setInterval(() => setCallDuration((d) => d + 1), 1000);
@@ -155,13 +169,12 @@ const CallScreen = ({
     };
   }, [callState]);
 
-  // Main WebRTC + signaling logic
+  // Main WebRTC flow
   useEffect(() => {
-    let mounted = true;
+    let isCancelled = false;
 
-    const setupCall = async () => {
+    const setup = async () => {
       try {
-        // Get media
         const stream = await navigator.mediaDevices.getUserMedia({
           audio: true,
           video: isVideoCall,
@@ -171,148 +184,168 @@ const CallScreen = ({
           localVideoRef.current.srcObject = stream;
         }
 
-        // Create peer connection
         const pc = new RTCPeerConnection(ICE_SERVERS);
         pcRef.current = pc;
 
-        // Add local tracks
         stream.getTracks().forEach((track) => pc.addTrack(track, stream));
 
-        // Handle remote stream
         pc.ontrack = (event) => {
           if (remoteVideoRef.current && event.streams[0]) {
             remoteVideoRef.current.srcObject = event.streams[0];
           }
-          if (mounted) setCallState("connected");
-        };
-
-        // Set up signaling channel
-        const channel = supabase.channel(channelName, {
-          config: { broadcast: { self: false } },
-        });
-        channelRef.current = channel;
-
-        // ICE candidates
-        pc.onicecandidate = (event) => {
-          if (event.candidate) {
-            channel.send({
-              type: "broadcast",
-              event: "call-signal",
-              payload: {
-                type: "ice-candidate",
-                candidate: event.candidate.toJSON(),
-                from: currentUserId,
-              },
-            });
-          }
+          if (!isCancelled) setCallState("connected");
         };
 
         pc.onconnectionstatechange = () => {
           if (pc.connectionState === "disconnected" || pc.connectionState === "failed") {
-            if (mounted) cleanup();
+            if (!isCancelled) cleanup();
           }
         };
 
-        // Listen for signals
-        channel.on("broadcast", { event: "call-signal" }, async ({ payload }) => {
-          if (!mounted || !pcRef.current) return;
+        const callDocRef = doc(db, "calls", activeCallId);
 
-          if (payload.type === "offer" && payload.from !== currentUserId) {
-            await pcRef.current.setRemoteDescription(new RTCSessionDescription(payload.sdp));
-            // Flush queued ICE candidates
-            for (const c of iceCandidateQueue.current) {
-              await pcRef.current.addIceCandidate(new RTCIceCandidate(c));
-            }
-            iceCandidateQueue.current = [];
-            const answer = await pcRef.current.createAnswer();
-            await pcRef.current.setLocalDescription(answer);
-            channel.send({
-              type: "broadcast",
-              event: "call-signal",
-              payload: { type: "answer", sdp: answer, from: currentUserId },
-            });
-          }
-
-          if (payload.type === "answer" && payload.from !== currentUserId) {
-            await pcRef.current.setRemoteDescription(new RTCSessionDescription(payload.sdp));
-            // Flush queued ICE candidates
-            for (const c of iceCandidateQueue.current) {
-              await pcRef.current.addIceCandidate(new RTCIceCandidate(c));
-            }
-            iceCandidateQueue.current = [];
-          }
-
-          if (payload.type === "ice-candidate" && payload.from !== currentUserId) {
-            if (pcRef.current.remoteDescription) {
-              await pcRef.current.addIceCandidate(new RTCIceCandidate(payload.candidate));
-            } else {
-              iceCandidateQueue.current.push(payload.candidate);
-            }
-          }
-
-          if (payload.type === "accept" && payload.from !== currentUserId) {
-            // Other user accepted, create offer
-            const offer = await pcRef.current!.createOffer();
-            await pcRef.current!.setLocalDescription(offer);
-            channel.send({
-              type: "broadcast",
-              event: "call-signal",
-              payload: { type: "offer", sdp: offer, from: currentUserId },
-            });
-            if (mounted) setCallState("connecting");
-          }
-
-          if (payload.type === "end" && payload.from !== currentUserId) {
-            if (mounted) cleanup();
-          }
-        });
-
-        await channel.subscribe();
-
-        // If outgoing call, send ring signal and then offer
         if (!isIncoming) {
-          channel.send({
-            type: "broadcast",
-            event: "call-signal",
-            payload: {
-              type: "ring",
-              from: currentUserId,
-              isVideo: isVideoCall,
-              callerName: "", // filled by receiver from profile
-            },
-          });
+          // Caller Flow
+          pc.onicecandidate = async (event) => {
+            if (event.candidate) {
+              const col = collection(db, "calls", activeCallId, "callerCandidates");
+              await addDoc(col, {
+                candidate: JSON.stringify(event.candidate.toJSON()),
+                from: currentUserId,
+                created_at: new Date().toISOString(),
+              }).catch(() => {});
+            }
+          };
 
-          // Auto-create offer for simplicity (peer will answer when they accept)
           const offer = await pc.createOffer();
           await pc.setLocalDescription(offer);
-          channel.send({
-            type: "broadcast",
-            event: "call-signal",
-            payload: { type: "offer", sdp: offer, from: currentUserId },
+
+          await setDoc(callDocRef, {
+            id: activeCallId,
+            conversation_id: conversationId,
+            caller_id: currentUserId,
+            caller_name: otherUser.display_name || "Caller",
+            caller_avatar: otherUser.avatar_url || "",
+            receiver_id: otherUser.user_id,
+            is_video: isVideoCall,
+            status: "ringing",
+            offer: JSON.stringify(offer),
+            created_at: new Date().toISOString(),
           });
-          if (mounted) setCallState("ringing");
+
+          if (!isCancelled) setCallState("ringing");
+
+          // Listen for answer from callee
+          unsubCallRef.current = onSnapshot(callDocRef, async (snap) => {
+            if (!snap.exists()) return;
+            const data = snap.data();
+            if (data.status === "ended" || data.status === "declined") {
+              if (!isCancelled) cleanup();
+            } else if (data.status === "connected" && data.answer && !pc.currentRemoteDescription) {
+              const rtcDesc = new RTCSessionDescription(JSON.parse(data.answer));
+              await pc.setRemoteDescription(rtcDesc);
+              if (!isCancelled) setCallState("connected");
+            }
+          });
+
+          // Listen for callee's ICE candidates
+          const calleeCandCol = collection(db, "calls", activeCallId, "calleeCandidates");
+          unsubCandRef.current = onSnapshot(calleeCandCol, (snap) => {
+            snap.docChanges().forEach(async (change) => {
+              if (change.type === "added") {
+                const candData = JSON.parse(change.doc.data().candidate);
+                try {
+                  await pc.addIceCandidate(new RTCIceCandidate(candData));
+                } catch (e) {
+                  console.warn("Failed to add callee candidate", e);
+                }
+              }
+            });
+          });
+        } else {
+          // Callee Flow (Incoming Call)
+          // Wait for user to press Accept or Listen for caller's status
+          unsubCallRef.current = onSnapshot(callDocRef, (snap) => {
+            if (!snap.exists()) return;
+            const data = snap.data();
+            if (data.status === "ended") {
+              if (!isCancelled) cleanup();
+            }
+          });
         }
       } catch (err) {
-        console.error("Call setup failed:", err);
-        if (mounted) cleanup();
+        console.error("Call initialization failed:", err);
+        if (!isCancelled) cleanup();
       }
     };
 
-    setupCall();
+    setup();
 
     return () => {
-      mounted = false;
+      isCancelled = true;
     };
   }, []);
 
-  // Accept incoming call
+  // Callee accepts the call
   const acceptCall = async () => {
+    if (!pcRef.current) return;
     setCallState("connecting");
-    channelRef.current?.send({
-      type: "broadcast",
-      event: "call-signal",
-      payload: { type: "accept", from: currentUserId },
-    });
+
+    const pc = pcRef.current;
+    const callDocRef = doc(db, "calls", activeCallId);
+
+    pc.onicecandidate = async (event) => {
+      if (event.candidate) {
+        const col = collection(db, "calls", activeCallId, "calleeCandidates");
+        await addDoc(col, {
+          candidate: JSON.stringify(event.candidate.toJSON()),
+          from: currentUserId,
+          created_at: new Date().toISOString(),
+        }).catch(() => {});
+      }
+    };
+
+    try {
+      const snap = await getDoc(callDocRef);
+      if (!snap.exists()) {
+        cleanup();
+        return;
+      }
+      const data = snap.data();
+      if (!data.offer) {
+        cleanup();
+        return;
+      }
+
+      await pc.setRemoteDescription(new RTCSessionDescription(JSON.parse(data.offer)));
+      const answer = await pc.createAnswer();
+      await pc.setLocalDescription(answer);
+
+      await updateDoc(callDocRef, {
+        answer: JSON.stringify(answer),
+        status: "connected",
+      });
+
+      // Listen for caller candidates
+      const callerCandCol = collection(db, "calls", activeCallId, "callerCandidates");
+      unsubCandRef.current = onSnapshot(callerCandCol, (candSnap) => {
+        candSnap.docChanges().forEach(async (change) => {
+          if (change.type === "added") {
+            const candData = JSON.parse(change.doc.data().candidate);
+            try {
+              await pc.addIceCandidate(new RTCIceCandidate(candData));
+            } catch (e) {
+              console.warn("Failed to add caller candidate", e);
+            }
+          }
+        });
+      });
+
+      setCallState("connected");
+    } catch (e) {
+      console.error("Error answering call:", e);
+      cleanup();
+    }
   };
 
   const toggleMute = () => {
@@ -336,17 +369,14 @@ const CallScreen = ({
 
   return (
     <div className="fixed inset-0 z-[100] flex flex-col bg-background">
-      {/* Video areas */}
       {isVideoCall ? (
         <div className="relative flex-1 bg-black">
-          {/* Remote video (full screen) */}
           <video
             ref={remoteVideoRef}
             autoPlay
             playsInline
             className="h-full w-full object-cover"
           />
-          {/* Local video (small overlay) */}
           <div className="absolute right-4 top-4 h-36 w-24 overflow-hidden rounded-2xl border-2 border-background shadow-lg">
             <video
               ref={localVideoRef}
@@ -357,48 +387,47 @@ const CallScreen = ({
               style={{ transform: "scaleX(-1)" }}
             />
           </div>
-          {/* Status overlay */}
           {callState !== "connected" && (
-            <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/60">
+            <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/60 backdrop-blur-sm">
               <img
-                src={otherUser.avatar_url || "https://i.pravatar.cc/150"}
+                src={otherUser.avatar_url || "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=200&auto=format&fit=crop&q=80"}
                 alt=""
-                className="h-24 w-24 rounded-full object-cover mb-4"
+                className="h-24 w-24 rounded-full object-cover mb-4 ring-4 ring-primary"
               />
               <h2 className="text-xl font-bold text-white">
-                {otherUser.display_name || "User"}
+                {otherUser.display_name || "Community Member"}
               </h2>
-              <p className="mt-2 text-sm text-white/70">
-                {callState === "ringing" && (isIncoming ? "Incoming video call..." : "Ringing...")}
-                {callState === "connecting" && "Connecting..."}
+              <p className="mt-2 text-sm text-white/80">
+                {callState === "ringing" && (isIncoming ? "Incoming video call..." : "Calling...")}
+                {callState === "connecting" && "Establishing connection..."}
                 {callState === "ended" && "Call ended"}
               </p>
             </div>
           )}
         </div>
       ) : (
-        /* Audio-only call UI */
-        <div className="flex flex-1 flex-col items-center justify-center">
-          <div className="relative">
+        <div className="flex flex-1 flex-col items-center justify-center p-6 text-center">
+          <div className="relative mb-6">
             <img
-              src={otherUser.avatar_url || "https://i.pravatar.cc/150"}
+              src={otherUser.avatar_url || "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=200&auto=format&fit=crop&q=80"}
               alt=""
-              className="h-28 w-28 rounded-full object-cover"
+              className="h-28 w-28 rounded-full object-cover ring-4 ring-primary/40 shadow-glow"
             />
             {callState === "ringing" && (
               <span className="absolute inset-0 animate-ping rounded-full bg-primary/30" />
             )}
           </div>
-          <h2 className="mt-6 text-2xl font-bold text-foreground">
-            {otherUser.display_name || "User"}
+          <h2 className="text-2xl font-bold text-foreground">
+            {otherUser.display_name || "Community Member"}
           </h2>
           <p className="mt-2 text-sm text-muted-foreground">
             {callState === "ringing" && (isIncoming ? "Incoming voice call..." : "Ringing...")}
-            {callState === "connecting" && "Connecting..."}
-            {callState === "connected" && formatTime(callDuration)}
+            {callState === "connecting" && "Connecting voice session..."}
+            {callState === "connected" && (
+              <span className="font-mono text-emerald-brand font-semibold">{formatTime(callDuration)}</span>
+            )}
             {callState === "ended" && "Call ended"}
           </p>
-          {/* Hidden audio elements */}
           <audio ref={remoteVideoRef as any} autoPlay />
           <video ref={localVideoRef} autoPlay playsInline muted className="hidden" />
         </div>
@@ -406,21 +435,19 @@ const CallScreen = ({
 
       {/* Controls */}
       <div
-        className="flex items-center justify-center gap-6 bg-background/80 backdrop-blur-sm pt-6"
-        style={{ paddingBottom: "calc(env(safe-area-inset-bottom) + 2rem)" }}
+        className="flex items-center justify-center gap-6 bg-background/90 backdrop-blur-md pt-6 pb-10 border-t border-border"
       >
         {callState === "ringing" && isIncoming ? (
           <>
-            {/* Accept / Decline */}
             <button
               onClick={cleanup}
-              className="flex h-16 w-16 items-center justify-center rounded-full bg-destructive text-white shadow-lg"
+              className="flex h-16 w-16 items-center justify-center rounded-full bg-destructive text-white shadow-lg transition-transform active:scale-95"
             >
               <PhoneOff className="h-7 w-7" />
             </button>
             <button
               onClick={acceptCall}
-              className="flex h-16 w-16 items-center justify-center rounded-full bg-green-500 text-white shadow-lg animate-pulse"
+              className="flex h-16 w-16 items-center justify-center rounded-full bg-green-500 text-white shadow-lg animate-pulse transition-transform active:scale-95"
             >
               <Phone className="h-7 w-7" />
             </button>
@@ -430,7 +457,7 @@ const CallScreen = ({
             <button
               onClick={toggleMute}
               className={`flex h-14 w-14 items-center justify-center rounded-full transition-colors ${
-                isMuted ? "bg-destructive/20 text-destructive" : "bg-secondary text-foreground"
+                isMuted ? "bg-destructive/20 text-destructive border border-destructive/40" : "bg-secondary text-foreground hover:bg-secondary/80"
               }`}
             >
               {isMuted ? <MicOff className="h-6 w-6" /> : <Mic className="h-6 w-6" />}
@@ -440,7 +467,7 @@ const CallScreen = ({
               <button
                 onClick={toggleVideo}
                 className={`flex h-14 w-14 items-center justify-center rounded-full transition-colors ${
-                  !isVideoEnabled ? "bg-destructive/20 text-destructive" : "bg-secondary text-foreground"
+                  !isVideoEnabled ? "bg-destructive/20 text-destructive border border-destructive/40" : "bg-secondary text-foreground hover:bg-secondary/80"
                 }`}
               >
                 {isVideoEnabled ? <Video className="h-6 w-6" /> : <VideoOff className="h-6 w-6" />}
@@ -449,7 +476,7 @@ const CallScreen = ({
 
             <button
               onClick={cleanup}
-              className="flex h-16 w-16 items-center justify-center rounded-full bg-destructive text-white shadow-lg"
+              className="flex h-16 w-16 items-center justify-center rounded-full bg-destructive text-white shadow-lg transition-transform active:scale-95 hover:opacity-90"
             >
               <PhoneOff className="h-7 w-7" />
             </button>

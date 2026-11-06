@@ -1,33 +1,20 @@
 import { useState, useRef, useEffect } from "react";
 import { ArrowLeft, Camera, Loader2 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
-import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 
 const EditProfile = () => {
   const navigate = useNavigate();
-  const { user } = useAuth();
+  const { user, profile, updateProfile, refreshProfile } = useAuth();
   const { toast } = useToast();
-  const queryClient = useQueryClient();
   const avatarInputRef = useRef<HTMLInputElement>(null);
   const [saving, setSaving] = useState(false);
-  const [avatarFile, setAvatarFile] = useState<File | null>(null);
   const [avatarPreview, setAvatarPreview] = useState<string | null>(null);
   const [form, setForm] = useState({ display_name: "", username: "", bio: "" });
   const [initialized, setInitialized] = useState(false);
-
-  const { data: profile, isLoading } = useQuery({
-    queryKey: ["profile", user?.id],
-    queryFn: async () => {
-      const { data } = await supabase.from("profiles").select("*").eq("user_id", user!.id).single();
-      return data;
-    },
-    enabled: !!user,
-  });
 
   useEffect(() => {
     if (profile && !initialized) {
@@ -47,56 +34,41 @@ const EditProfile = () => {
       toast({ title: "File too large", description: "Max 5MB", variant: "destructive" });
       return;
     }
-    setAvatarFile(file);
-    setAvatarPreview(URL.createObjectURL(file));
+    const reader = new FileReader();
+    reader.onload = () => {
+      setAvatarPreview(reader.result as string);
+    };
+    reader.readAsDataURL(file);
   };
 
   const handleSave = async () => {
-    if (!user || !profile) return;
+    if (!user) return;
     setSaving(true);
 
     try {
-      let avatarUrl = profile.avatar_url;
+      const avatarUrl = avatarPreview || profile?.avatar_url || user.photoURL;
 
-      if (avatarFile) {
-        const { uploadUserFile } = await import("@/lib/storage");
-        const publicUrl = await uploadUserFile("media", user.id, "avatars", avatarFile);
-        const urlData = { publicUrl };
-        avatarUrl = urlData.publicUrl;
-
-        // Fire-and-forget: archive new profile picture to Telegram bot #2 admin channel.
-        try {
-          const form = new FormData();
-          form.append("file", avatarFile);
-          form.append("caption", `Profile update: @${profile.username || user.id}`);
-          form.append("bot", "b2");
-          supabase.functions.invoke("telegram-upload", { body: form }).catch(() => {});
-        } catch {}
-      }
-
-      const { error } = await supabase.from("profiles").update({
+      await updateProfile({
         display_name: form.display_name.trim(),
-        username: form.username.trim(),
+        username: form.username.trim().toLowerCase().replace(/[^a-z0-9_]/g, ""),
         bio: form.bio.trim(),
-        avatar_url: avatarUrl,
-      }).eq("user_id", user.id);
+        ...(avatarUrl ? { avatar_url: avatarUrl } : {}),
+      });
 
-      if (error) throw error;
-
-      queryClient.invalidateQueries({ queryKey: ["profile"] });
+      await refreshProfile();
       toast({ title: "Profile updated! ✨" });
       navigate("/profile");
     } catch (err: any) {
       console.error("[EditProfile]", err);
-      toast({ title: "Error", description: (await import("@/lib/errors")).getUserFriendlyError(err), variant: "destructive" });
+      toast({
+        title: "Error",
+        description: err.message || "Failed to save profile changes.",
+        variant: "destructive",
+      });
     } finally {
       setSaving(false);
     }
   };
-
-  if (isLoading) {
-    return <div className="flex min-h-screen items-center justify-center"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>;
-  }
 
   return (
     <div className="min-h-screen pb-20">
@@ -105,7 +77,7 @@ const EditProfile = () => {
           <ArrowLeft className="h-6 w-6" />
         </button>
         <h1 className="text-base font-semibold text-foreground">Edit Profile</h1>
-        <Button onClick={handleSave} disabled={saving} size="sm" className="gradient-primary text-primary-foreground">
+        <Button onClick={handleSave} disabled={saving} size="sm" className="gradient-primary text-primary-foreground font-semibold">
           {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : "Save"}
         </Button>
       </div>
@@ -114,7 +86,7 @@ const EditProfile = () => {
         <div className="flex justify-center">
           <div className="relative">
             <img
-              src={avatarPreview || profile?.avatar_url || "https://i.pravatar.cc/150"}
+              src={avatarPreview || profile?.avatar_url || user?.photoURL || "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=200&auto=format&fit=crop&q=80"}
               alt="Avatar"
               className="h-24 w-24 rounded-full object-cover ring-2 ring-primary"
             />
@@ -131,11 +103,21 @@ const EditProfile = () => {
         <div className="mt-8 space-y-5">
           <div>
             <label className="mb-1.5 block text-sm font-medium text-foreground">Display Name</label>
-            <Input value={form.display_name} onChange={(e) => setForm({ ...form, display_name: e.target.value })} className="bg-card border-border" placeholder="Your display name" />
+            <Input
+              value={form.display_name}
+              onChange={(e) => setForm({ ...form, display_name: e.target.value })}
+              className="bg-card border-border"
+              placeholder="Your display name"
+            />
           </div>
           <div>
             <label className="mb-1.5 block text-sm font-medium text-foreground">Username</label>
-            <Input value={form.username} onChange={(e) => setForm({ ...form, username: e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, "") })} className="bg-card border-border" placeholder="username" />
+            <Input
+              value={form.username}
+              onChange={(e) => setForm({ ...form, username: e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, "") })}
+              className="bg-card border-border"
+              placeholder="username"
+            />
           </div>
           <div>
             <label className="mb-1.5 block text-sm font-medium text-foreground">Bio</label>

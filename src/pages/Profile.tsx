@@ -38,20 +38,14 @@ import heroPattern from "@/assets/hero-pattern.jpg";
 import { getVideoSrc } from "@/lib/video";
 
 const Profile = () => {
-  const { user } = useAuth();
+  const { user, profile: authProfile } = useAuth();
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState("posts");
   const [openPost, setOpenPost] = useState<any>(null);
   const [followList, setFollowList] = useState<null | "followers" | "following">(null);
 
-  const { data: profile, isLoading: profileLoading } = useQuery({
-    queryKey: ["profile", user?.id],
-    queryFn: async () => {
-      const { data } = await supabase.from("profiles").select("*").eq("user_id", user!.id).single();
-      return data;
-    },
-    enabled: !!user,
-  });
+  const profile = authProfile;
+  const profileLoading = false;
 
   const { data: userPosts = [] } = useQuery({
     queryKey: ["user-posts", user?.id],
